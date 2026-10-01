@@ -21,7 +21,7 @@ Hybrid strategy: news-driven + technical analysis.
 - Max leverage: 3x
 - Risk per trade: 1% of balance
 - Max open positions: 2
-- Stop-loss at market structure (beyond the setup swing); TP1 at 2R books 30% and moves SL to breakeven; the rest trails behind swings (runner target 10R)
+- Stop-loss at market structure (beyond the setup swing); at TP1 (2R) the SL moves to breakeven (no partial booking; 30% partial was tried and backtested worse); the rest trails behind swings (runner target 10R)
 - Setups come from knowledge/core.md + core.yaml (market structure, candles, psychology, sessions), scored by confluence
 - Daily loss limit: 3% → bot stops trading for the day
 - Kill switch: local command `python -m bot.stop` halts all trading immediately

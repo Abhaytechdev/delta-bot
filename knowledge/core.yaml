@@ -41,7 +41,7 @@ management:
   min_stop_atr: 0.75
   max_stop_atr: 4.0
   tp1_r: 2.0
-  tp1_fraction: 0.30
+  tp1_fraction: 0.0     # trial: no partial booking, TP1 only moves SL to breakeven (was 0.30)
   be_fee_buffer: 0.0015  # move SL to entry +/- 0.15% (covers round-trip fees)
   trail_buffer_atr: 0.25
   runner_r: 10.0

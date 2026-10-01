@@ -76,7 +76,7 @@ News is a helper, not the strategy. Strong news **in** the trade direction adds 
 ## 6. Trade management (protect first, then let winners run)
 
 1. **Stop-loss** goes beyond the structure that defines the idea: below the setup's swing low or sweep wick, plus `sl_buffer_atr` x ATR. If that stop is wider than `max_stop_atr` x ATR, skip the trade. If it is tighter than `min_stop_atr` x ATR, widen it (noise would hit it).
-2. **TP1** at `tp1_r` x R: book `tp1_fraction` (30%) and move the stop to **breakeven + fees**. From here the trade can't lose.
+2. **TP1** at `tp1_r` x R: book `tp1_fraction` (currently 0%, nothing booked) and move the stop to **breakeven + fees**. From here the trade can't lose.
 3. **Trail** the rest behind each new confirmed swing low (or high, for shorts), minus a buffer. This rides the long trends that pay for all the small losses.
 4. **Runner target** at `runner_r` x R. This exists because every order must carry a target; the trailing stop normally exits first.
 5. Many small losses and a few large wins is the expected shape. A 25–35% win rate is fine if winners average 3R or more.
@@ -114,3 +114,4 @@ Ablation on 4h, in-sample only (avg R with one concept removed; baseline +0.076)
 
 ### Changelog
 - v1 (2026-10-01): initial version.
+- v1.1 (2026-10-01): tp1_fraction 0.30 -> 0.0 (owner-approved trial). 4h backtest: in-sample +0.076R -> +0.140R, out-of-sample +0.115R -> +0.125R per trade.
