@@ -9,7 +9,7 @@ exchange:
 
 trading:
   pairs: [BTCUSD, ETHUSD]   # perpetual futures
-  timeframe: 15m
+  timeframe: 1h
 
 risk:
   max_leverage: 3
@@ -18,6 +18,9 @@ risk:
   daily_loss_limit_pct: 3.0    # stop trading for the day when hit
   require_stop_loss: true      # every order must carry a stop-loss
   require_take_profit: true    # every order must carry a target
+  stop_atr_mult: 2.0           # stop distance = 2 x ATR(14)
+  reward_risk: 2.0             # target distance = 2 x stop distance
+  max_hold_hours: 24           # close any position older than this
 
 storage:
   db_path: data/bot.db

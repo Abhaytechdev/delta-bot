@@ -17,10 +17,13 @@ Hybrid strategy: news-driven + technical analysis.
 
 ## Risk rules (editable in config.yaml, defaults below)
 - Pairs: BTCUSD, ETHUSD perpetual
-- Timeframe: 15m
+- Timeframe: 1h
 - Max leverage: 3x
 - Risk per trade: 1% of balance
 - Max open positions: 2
+- Stop-loss: 2x ATR(14); target: 1:2 risk-reward
+- Entry: limit order first (maker fee), market if not filled
+- Max hold: 24h, then exit
 - Daily loss limit: 3% → bot stops trading for the day
 - Kill switch: local command `python -m bot.stop` halts all trading immediately
 
