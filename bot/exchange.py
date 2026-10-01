@@ -11,7 +11,7 @@ from bot.config import Secrets
 
 log = logging.getLogger(__name__)
 
-RESOLUTION_SECONDS = {"1m": 60, "5m": 300, "15m": 900, "30m": 1800, "1h": 3600, "4h": 14400, "1d": 86400}
+RESOLUTION_SECONDS = {"1m": 60, "5m": 300, "15m": 900, "30m": 1800, "1h": 3600, "2h": 7200, "4h": 14400, "6h": 21600, "1d": 86400}
 
 
 @dataclass(frozen=True)
@@ -138,6 +138,18 @@ class Exchange:
             "take_profit_order": {"order_type": "market_order", "stop_price": p.round_price(take_profit, up=not long)},
             "bracket_stop_trigger_method": "mark_price",
         })
+
+    def edit_stop(self, symbol: str, order_id: int, stop_price: float, long: bool) -> dict:
+        """Move an existing stop-loss order (rounded toward the protective side)."""
+        p = self.product(symbol)
+        return self.client.edit_order({"id": order_id, "product_id": p.id,
+                                       "stop_price": p.round_price(stop_price, up=long)})
+
+    def place_reduce_limit(self, symbol: str, side: str, size: int, price: float) -> dict:
+        """Reduce-only limit order (partial take-profit). Can only shrink a position."""
+        p = self.product(symbol)
+        return self.client.place_order(p.id, size, side, limit_price=p.round_price(price, up=side == "sell"),
+                                       reduce_only="true")
 
     def order(self, order_id: int) -> dict:
         return self.client.get_order_by_id(order_id)

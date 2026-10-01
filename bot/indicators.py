@@ -4,7 +4,8 @@ import pandas as pd
 
 
 def to_frame(candles: list[dict]) -> pd.DataFrame:
-    df = pd.DataFrame(candles)[["time", "open", "high", "low", "close"]].astype(float)
+    cols = ["time", "open", "high", "low", "close"] + (["volume"] if candles and "volume" in candles[0] else [])
+    df = pd.DataFrame(candles)[cols].astype(float)
     df["time"] = df["time"].astype(int)
     return df.reset_index(drop=True)
 

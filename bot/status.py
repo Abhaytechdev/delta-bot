@@ -42,7 +42,8 @@ def main() -> None:
     for p in positions:
         t = trades.get(p.symbol)
         mark = ex.mark_price(p.symbol)
-        extra = (f" SL {t['stop_loss']:.2f} TP {t['take_profit']:.2f} "
+        extra = (f" SL {t['sl_current'] or t['stop_loss']:.2f} TP1 {t['tp1'] or 0:.2f}"
+                 f"{' (done)' if t['tp1_done'] else ''} runner {t['take_profit']:.2f} "
                  f"age {(time.time() - t['opened_at']) / 3600:.1f}h [{t['reason']}]") if t else " (not opened by bot)"
         print(f"  {p.symbol} {'LONG' if p.size > 0 else 'SHORT'} x{abs(p.size)} entry {p.entry_price} mark {mark:.2f}{extra}")
 

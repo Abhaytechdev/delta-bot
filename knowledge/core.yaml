@@ -1,0 +1,48 @@
+# Machine-readable parameters for knowledge/core.md. Keep both in sync.
+version: 1
+
+structure:
+  swing_left: 3          # candles before a swing point
+  swing_right: 3         # candles after (confirmation delay, no lookahead)
+  htf_factor: 4          # higher timeframe = 4x trading timeframe
+  zone_memory: 4         # how many recent swing lows/highs act as support/resistance
+  zone_atr: 0.5          # "at a level" = within this many ATR of a zone
+  min_retrace: 0.382     # pullback depth into the last leg to count as discount
+
+psychology:
+  overextended_atr: 3.0  # distance from EMA50 in ATR = FOMO zone
+  volume_spike: 2.0      # x 20-candle average volume
+  capitulation_atr: 2.5  # candle range in ATR
+  compression: 0.7       # ATR / 100-candle median ATR
+
+weights:
+  htf_trend: 2.0
+  ltf_trend: 1.0
+  at_level: 1.5
+  discount: 1.0
+  sweep: 2.0
+  engulfing: 1.5
+  pin_bar: 1.5
+  strong_candle: 1.0
+  bos: 1.0
+  volume_spike: 0.5
+  compression: 0.5
+  session_open: 0.5
+  weekend: -1.0
+  overextended: -2.0
+  news_aligned: 1.0
+  news_against: -5.0
+
+entry:
+  min_score: 5.0
+
+management:
+  sl_buffer_atr: 0.25
+  min_stop_atr: 0.75
+  max_stop_atr: 4.0
+  tp1_r: 2.0
+  tp1_fraction: 0.30
+  be_fee_buffer: 0.0015  # move SL to entry +/- 0.15% (covers round-trip fees)
+  trail_buffer_atr: 0.25
+  runner_r: 10.0
+  max_hold_days: 30

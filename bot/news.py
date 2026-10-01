@@ -1,7 +1,7 @@
 """News sentiment from free crypto RSS feeds.
 
 Score per pair in [-1, 1]. Uses Claude when ANTHROPIC_API_KEY is set, otherwise a
-keyword scorer. |score| >= strategy.news_strong_threshold counts as strong news.
+keyword scorer. |score| >= news.strong_threshold counts as strong news.
 """
 
 import calendar
@@ -123,7 +123,7 @@ class NewsMonitor:
 
     def __init__(self, cfg: dict, api_key: str = "", refresh_s: int = 900):
         self.pairs = cfg["trading"]["pairs"]
-        self.lookback = cfg["strategy"]["news_lookback_hours"]
+        self.lookback = cfg["news"]["lookback_hours"]
         self.api_key = api_key
         self.refresh_s = refresh_s
         self.scores: dict[str, float] = {p: 0.0 for p in self.pairs}

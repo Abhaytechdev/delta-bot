@@ -1,7 +1,9 @@
 """Main trading loop: python -m bot.trader
 
-Every POLL_S seconds: sync account, protect/expire positions, record closed trades.
-After each new candle closes: evaluate the strategy per pair and enter if allowed.
+Every POLL_S seconds: sync account, book TP1 / move stop to breakeven, keep every
+position protected, record closed trades.
+After each new candle closes: trail stops behind new swings, then look for setups
+(knowledge/core.md via bot.brain) and enter if the risk manager allows.
 """
 
 import argparse
@@ -10,26 +12,26 @@ import logging.handlers
 import signal
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import datetime
 
+from bot import brain
 from bot.config import ROOT, load_config, load_secrets
 from bot.db import DB
 from bot.exchange import RESOLUTION_SECONDS, Exchange, Position
 from bot.feed import PriceFeed
-from bot.indicators import add_indicators, to_frame
+from bot.indicators import to_frame
 from bot.news import NewsMonitor
 from bot.risk import RiskManager, size_position
-from bot.strategy import Signal, evaluate
 
 log = logging.getLogger("bot")
 
 POLL_S = 30
-CANDLES = 400            # history for indicators (needs > ema_slow)
+CANDLES = 600            # history for indicators + higher-timeframe structure
 CANDLE_DELAY_S = 10      # wait after candle close for the exchange to finalise it
 ENTRY_WAIT_S = 60        # how long a post-only limit entry may rest
 MAX_CHASE_ATR = 0.25     # skip market fallback if price ran this many ATRs past the signal
 SNAPSHOT_S = 300
-STALE_SIGNAL_S = 600     # only act on a candle within 10 min of its close
+STALE_SIGNAL_S = 900     # only act on a candle within 15 min of its close
 
 
 def setup_logging(cfg: dict) -> None:
@@ -54,12 +56,13 @@ class Trader:
         self.ex = Exchange(cfg, secrets)
         self.db = DB(cfg["storage"]["db_path"])
         self.risk = RiskManager(cfg, self.db)
-        self.news = NewsMonitor(cfg, secrets.anthropic_api_key)
+        self.news = NewsMonitor(cfg)  # keyword scoring only: no Claude in live trading
         self.feed = PriceFeed(cfg["exchange"]["ws_url"], cfg["trading"]["pairs"])
+        self.k = brain.load_knowledge()
+        self.m = self.k["management"]
         self.pairs = cfg["trading"]["pairs"]
         self.tf = cfg["trading"]["timeframe"]
         self.tf_s = RESOLUTION_SECONDS[self.tf]
-        self.max_hold_s = cfg["risk"]["max_hold_hours"] * 3600
         self._last_bar = int(self.db.get("last_bar", "0"))
         self._last_snapshot = 0.0
         self._halt_logged = False
@@ -67,11 +70,14 @@ class Trader:
 
     # ---------- helpers ----------
     def note(self, level: str, msg: str) -> None:
-        getattr(log, level.lower() if level != "WARN" else "warning")(msg)
+        getattr(log, {"WARN": "warning"}.get(level, level.lower()))(msg)
         self.db.event(level, msg)
 
     def price(self, symbol: str) -> float:
         return self.feed.price(symbol) or self.ex.mark_price(symbol)
+
+    def analyze(self, symbol: str):
+        return brain.analyze(to_frame(self.ex.candles(symbol, self.tf, CANDLES)), self.k, self.tf_s)
 
     # ---------- lifecycle ----------
     def setup(self) -> None:
@@ -80,7 +86,7 @@ class Trader:
         self.feed.start()
         bal, _ = self.ex.balance_usd()
         self.note("INFO", f"bot started on {self.cfg['exchange']['environment']}, balance {bal:.2f} USD, "
-                          f"pairs {self.pairs} {self.tf}")
+                          f"pairs {self.pairs} {self.tf}, knowledge v{self.k['version']}")
 
     def run(self, once: bool = False) -> None:
         self.setup()
@@ -107,44 +113,58 @@ class Trader:
 
         positions = {p.symbol: p for p in self.ex.positions()}
         self.record_closed(positions)
+        self.manage_tp1(positions)
         self.protect(positions)
         self.expire(positions)
         self.risk.daily_loss_hit(equity)
 
+        bar = int(now - CANDLE_DELAY_S) // self.tf_s * self.tf_s  # start of the current candle
+        if bar <= self._last_bar:
+            return
+        self._last_bar = bar
+        self.db.set("last_bar", bar)
+        if now - bar > STALE_SIGNAL_S:  # after a restart, don't act on an old candle
+            return
+        frames = {s: self.analyze(s) for s in self.pairs}
+        self.trail(positions, frames)
         if self.risk.halted():
             if not self._halt_logged:
                 self.note("WARN", "kill switch active: no new trades")
                 self._halt_logged = True
             return
         self._halt_logged = False
-
-        bar = int(now - CANDLE_DELAY_S) // self.tf_s * self.tf_s  # start of current candle
-        if bar > self._last_bar:
-            self._last_bar = bar
-            self.db.set("last_bar", bar)
-            if now - bar <= STALE_SIGNAL_S:  # after a restart, don't act on an old candle
-                self.on_candle_close(positions, bal, equity)
+        self.look_for_setups(positions, frames, bal, equity)
 
     # ---------- position management ----------
+    def open_trade(self, symbol: str):
+        return next((t for t in self.db.open_trades() if t["symbol"] == symbol), None)
+
     def record_closed(self, positions: dict[str, Position]) -> None:
-        """Trades open in the DB but flat on the exchange were closed (SL/TP/manual)."""
+        """Trades open in the DB but flat on the exchange were closed (SL / trail / target / manual)."""
         for t in self.db.open_trades():
-            if t["symbol"] in positions or t["entry_price"] is None:
+            if t["symbol"] in positions:
                 continue
+            for o in self.ex.open_orders(t["symbol"]):  # leftover TP1 order, if any
+                try:
+                    self.ex.cancel_order(t["symbol"], o["id"])
+                except Exception:
+                    pass
             pnl, fees, exit_price = self.realized(t)
-            if exit_price is None:
-                reason = t["exit_reason"] or "unknown"
-            elif t["exit_reason"]:
-                reason = t["exit_reason"]
-            else:
-                reason = "take_profit" if abs(exit_price - t["take_profit"]) < abs(exit_price - t["stop_loss"]) else "stop_loss"
+            reason = t["exit_reason"]
+            if not reason and exit_price is not None:
+                long = t["side"] == "buy"
+                if (exit_price >= t["take_profit"]) if long else (exit_price <= t["take_profit"]):
+                    reason = "runner_target"
+                else:
+                    reason = "breakeven/trail" if t["tp1_done"] else "stop_loss"
+            r = pnl / t["risk_usd"] if t["risk_usd"] else 0
             self.db.update_trade(t["id"], status="closed", closed_at=time.time(), exit_price=exit_price,
-                                 exit_reason=reason, pnl=pnl, fees=fees)
-            self.note("INFO", f"CLOSED {t['symbol']} {t['side']} x{t['size']} @ {exit_price} ({reason}) "
-                              f"pnl {pnl:+.2f} USD (fees {fees:.2f})")
+                                 exit_reason=reason or "unknown", pnl=pnl, fees=fees)
+            self.note("INFO", f"CLOSED {t['symbol']} {t['side']} x{t['size']} ({reason}) "
+                              f"pnl {pnl:+.2f} USD = {r:+.2f}R (fees {fees:.2f})")
 
     def realized(self, t) -> tuple[float, float, float | None]:
-        """Net P&L, fees, avg exit price from exchange fills since the trade opened."""
+        """Net P&L, fees, avg final exit price from exchange fills since the trade opened."""
         pid = self.ex.product(t["symbol"]).id
         fills = self.ex.client.fills({"product_ids": str(pid)}, page_size=50)["result"]
         since = t["opened_at"] - 5
@@ -166,31 +186,71 @@ class Trader:
         fees = sum(x[2] for x in entries + exits)
         if not exits:
             return -fees, fees, None
-        qty = sum(x[1] for x in exits)
-        exit_price = sum(x[0] * x[1] for x in exits) / qty
         direction = 1 if t["side"] == "buy" else -1
-        gross = (exit_price - t["entry_price"]) * direction * qty * t["contract_value"]
-        return gross - fees, fees, exit_price
+        gross = sum((px - t["entry_price"]) * direction * n * t["contract_value"] for px, n, _ in exits)
+        return gross - fees, fees, exits[-1][0]
+
+    def move_stop(self, t, pos: Position, new_sl: float, why: str) -> None:
+        long = t["side"] == "buy"
+        mark = self.price(t["symbol"])
+        if (new_sl >= mark) if long else (new_sl <= mark):
+            return  # would trigger immediately; keep the current stop
+        sl_orders = [o for o in self.ex.open_orders(t["symbol"]) if o.get("stop_order_type") == "stop_loss_order"]
+        if not sl_orders:
+            return  # protect() will re-attach
+        for o in sl_orders:
+            self.ex.edit_stop(t["symbol"], o["id"], new_sl, long)
+        self.db.update_trade(t["id"], sl_current=new_sl)
+        self.note("INFO", f"{t['symbol']}: stop moved to {new_sl:.2f} ({why})")
+
+    def manage_tp1(self, positions: dict[str, Position]) -> None:
+        """TP1 reached (partial filled, or price touched it) -> stop to breakeven + fees."""
+        for t in self.db.open_trades():
+            pos = positions.get(t["symbol"])
+            if not pos or t["tp1"] is None:
+                continue
+            long = t["side"] == "buy"
+            be = t["entry_price"] * (1 + self.m["be_fee_buffer"] if long else 1 - self.m["be_fee_buffer"])
+            if not t["tp1_done"]:
+                mark = self.price(t["symbol"])
+                reached = abs(pos.size) < t["size"] or ((mark >= t["tp1"]) if long else (mark <= t["tp1"]))
+                if not reached:
+                    continue
+                self.db.update_trade(t["id"], tp1_done=1)
+                self.note("INFO", f"{t['symbol']}: TP1 reached ({abs(pos.size)}/{t['size']} contracts left)")
+            cur = t["sl_current"] or t["stop_loss"]
+            if (cur < be) if long else (cur > be):  # retried every tick until the stop is at breakeven
+                self.move_stop(t, pos, be, "breakeven after TP1")
+
+    def trail(self, positions: dict[str, Position], frames: dict) -> None:
+        for t in self.db.open_trades():
+            pos = positions.get(t["symbol"])
+            if not pos or not t["tp1_done"]:
+                continue
+            lvl = brain.trail_level(frames[t["symbol"]].iloc[-1], t["side"], self.k)
+            cur = t["sl_current"] or t["stop_loss"]
+            better = lvl is not None and ((lvl > cur) if t["side"] == "buy" else (lvl < cur))
+            if better:
+                self.move_stop(t, pos, lvl, "trailing behind latest swing")
 
     def protect(self, positions: dict[str, Position]) -> None:
-        """Every open position must have a stop-loss covering its full size; else add one or close."""
-        trades = {t["symbol"]: t for t in self.db.open_trades()}
+        """Every open position must have a stop-loss and target covering its full size; else add or close."""
         for sym, pos in positions.items():
             orders = self.ex.open_orders(sym)
             sl_size = sum(int(o["size"]) for o in orders if o.get("stop_order_type") == "stop_loss_order")
             tp_size = sum(int(o["size"]) for o in orders if o.get("stop_order_type") == "take_profit_order")
             if sl_size >= abs(pos.size) and tp_size >= abs(pos.size):
                 continue
-            t = trades.get(sym)
+            t = self.open_trade(sym)
             long = pos.size > 0
             if t:
-                sl, tp = t["stop_loss"], t["take_profit"]
+                sl, tp = t["sl_current"] or t["stop_loss"], t["take_profit"]
             else:
                 self.note("WARN", f"unmanaged {sym} position x{pos.size}; attaching default SL/TP")
-                df = add_indicators(to_frame(self.ex.candles(sym, self.tf, CANDLES)), self.cfg["strategy"])
-                d = self.cfg["risk"]["stop_atr_mult"] * float(df["atr"].iloc[-1])
+                atr = float(self.analyze(sym)["atr"].iloc[-1])
+                d = 2 * atr
                 sl = pos.entry_price - d if long else pos.entry_price + d
-                tp = pos.entry_price + d * self.cfg["risk"]["reward_risk"] * (1 if long else -1)
+                tp = pos.entry_price + d * self.m["runner_r"] * (1 if long else -1)
             try:
                 for o in orders:
                     if o.get("stop_order_type") in ("stop_loss_order", "take_profit_order"):
@@ -204,84 +264,90 @@ class Trader:
     def expire(self, positions: dict[str, Position]) -> None:
         for t in self.db.open_trades():
             pos = positions.get(t["symbol"])
-            if pos and time.time() - t["opened_at"] >= self.max_hold_s:
-                self.note("INFO", f"{t['symbol']}: max hold {self.cfg['risk']['max_hold_hours']}h reached, closing")
+            if pos and time.time() - t["opened_at"] >= self.m["max_hold_days"] * 86400:
+                self.note("INFO", f"{t['symbol']}: max hold {self.m['max_hold_days']} days reached, closing")
                 self.close(pos, "max_hold", trade_id=t["id"])
 
     def close(self, pos: Position, reason: str, trade_id: int | None = None) -> None:
         self.ex.close_position(pos)
-        if trade_id is None:
-            for t in self.db.open_trades():
-                if t["symbol"] == pos.symbol:
-                    trade_id = t["id"]
+        t = self.open_trade(pos.symbol)
+        trade_id = trade_id or (t["id"] if t else None)
         if trade_id is not None:
             self.db.update_trade(trade_id, exit_reason=reason)
 
     # ---------- entries ----------
-    def on_candle_close(self, positions: dict[str, Position], balance: float, equity: float) -> None:
+    def look_for_setups(self, positions: dict[str, Position], frames: dict, balance: float, equity: float) -> None:
         scores = self.news.get()
-        self.db.set("news", ";".join(f"{p}={s:+.2f}" for p, s in scores.items()) + f" ({self.news.source}, "
-                    f"{self.news.headline_count} headlines)")
+        self.db.set("news", ";".join(f"{p}={s:+.2f}" for p, s in scores.items())
+                    + f" ({self.news.source}, {self.news.headline_count} headlines)")
         open_syms = set(positions)
         for sym in self.pairs:
-            df = add_indicators(to_frame(self.ex.candles(sym, self.tf, CANDLES)), self.cfg["strategy"])
+            df = frames[sym]
             r = df.iloc[-1]
-            log.info("%s close=%.2f ema50=%.2f ema200=%.2f rsi=%.1f atr=%.2f news=%+.2f",
-                     sym, r.close, r.ema_mid, r.ema_slow, r.rsi, r.atr, scores.get(sym, 0))
-            sig = evaluate(df, self.cfg, scores.get(sym, 0.0))
-            if not sig:
+            log.info("%s close=%.2f trend=%+d htf=%+d atr=%.2f news=%+.2f",
+                     sym, r.close, r.trend, r.htf_trend, r.atr, scores.get(sym, 0))
+            st = brain.setup_at(df, len(df) - 1, self.k, scores.get(sym, 0.0), self.cfg["news"]["strong_threshold"])
+            if not st:
                 continue
             ok, why = self.risk.can_open(sym, open_syms, equity)
             if not ok:
-                self.note("INFO", f"{sym} {sig.side} signal skipped: {why}")
+                self.note("INFO", f"{sym} {st.side} setup skipped: {why} [{st.reason}]")
                 continue
-            if self.enter(sym, sig, balance, positions):
+            if self.enter(sym, st, balance, positions):
                 open_syms.add(sym)
 
-    def enter(self, sym: str, sig: Signal, balance: float, positions: dict[str, Position]) -> bool:
+    def enter(self, sym: str, st: brain.Setup, balance: float, positions: dict[str, Position]) -> bool:
         product = self.ex.product(sym)
         open_notional = sum(abs(p.size) * self.ex.product(p.symbol).contract_value * self.price(p.symbol)
                             for p in positions.values())
-        sizing = size_position(balance, sig.price, sig.stop_loss, product.contract_value,
+        sizing = size_position(balance, st.price, st.stop_loss, product.contract_value,
                                self.cfg["risk"], open_notional)
         if sizing.contracts < 1:
-            self.note("INFO", f"{sym} {sig.side} signal skipped: {sizing.note}")
+            self.note("INFO", f"{sym} {st.side} setup skipped: {sizing.note} [{st.reason}]")
             return False
-        long = sig.side == "buy"
+        long = st.side == "buy"
         opened_at = time.time()
-        filled = self._limit_entry(sym, sig, sizing.contracts)
-        if not filled:
+        if not self._limit_entry(sym, st, sizing.contracts):
             px = self.price(sym)
-            ran = (px - sig.price) * (1 if long else -1)
-            beyond = (px <= sig.stop_loss or px >= sig.take_profit)
-            if ran > MAX_CHASE_ATR * sig.atr or beyond:
-                self.note("INFO", f"{sym} {sig.side}: price moved to {px:.2f}, not chasing")
+            ran = (px - st.price) * (1 if long else -1)
+            beyond = (px <= st.stop_loss or px >= st.tp1) if long else (px >= st.stop_loss or px <= st.tp1)
+            if ran > MAX_CHASE_ATR * st.atr or beyond:
+                self.note("INFO", f"{sym} {st.side}: price moved to {px:.2f}, not chasing")
                 return False
-            self.ex.place_entry(sym, sig.side, sizing.contracts, sig.stop_loss, sig.take_profit)
+            self.ex.place_entry(sym, st.side, sizing.contracts, st.stop_loss, st.runner_tp)
             time.sleep(2)
         pos = next((p for p in self.ex.positions() if p.symbol == sym), None)
         if not pos:
-            self.note("WARN", f"{sym} {sig.side}: entry not filled")
+            self.note("WARN", f"{sym} {st.side}: entry not filled")
             return False
+        size = abs(pos.size)
+        d = 1 if long else -1
+        dist = abs(pos.entry_price - st.stop_loss)
+        tp1 = pos.entry_price + d * dist * self.m["tp1_r"]
+        tp1_size = int(round(size * self.m["tp1_fraction"]))
+        if not 0 < tp1_size < size:
+            tp1_size = 0  # too small to split: TP1 only moves the stop to breakeven
         self.db.open_trade(
-            symbol=sym, side=sig.side, size=abs(pos.size), contract_value=product.contract_value,
-            entry_price=pos.entry_price, stop_loss=sig.stop_loss, take_profit=sig.take_profit,
-            risk_usd=abs(pos.entry_price - sig.stop_loss) * abs(pos.size) * product.contract_value,
-            reason=sig.reason, opened_at=opened_at,
+            symbol=sym, side=st.side, size=size, contract_value=product.contract_value,
+            entry_price=pos.entry_price, stop_loss=st.stop_loss, take_profit=st.runner_tp,
+            risk_usd=dist * size * product.contract_value, reason=st.reason, opened_at=opened_at,
+            tp1=tp1, tp1_size=tp1_size, sl_current=st.stop_loss,
         )
         positions[sym] = pos
-        self.note("INFO", f"OPENED {sym} {sig.side} x{abs(pos.size)} @ {pos.entry_price} SL {sig.stop_loss:.2f} "
-                          f"TP {sig.take_profit:.2f} risk ${sizing.risk_usd:.2f} [{sig.reason}]"
-                          + (f" ({sizing.note})" if sizing.note else ""))
+        if tp1_size:
+            self.ex.place_reduce_limit(sym, "sell" if long else "buy", tp1_size, tp1)
+        self.note("INFO", f"OPENED {sym} {st.side} x{size} @ {pos.entry_price} SL {st.stop_loss:.2f} "
+                          f"TP1 {tp1:.2f} ({tp1_size} contracts) runner {st.runner_tp:.2f} "
+                          f"risk ${sizing.risk_usd:.2f} [{st.reason}]")
         self.protect({sym: pos})
         return True
 
-    def _limit_entry(self, sym: str, sig: Signal, size: int) -> bool:
+    def _limit_entry(self, sym: str, st: brain.Setup, size: int) -> bool:
         """Post-only limit at the touch. True if (at least partly) filled."""
         bid, ask = self.ex.best_bid_ask(sym)
         try:
-            o = self.ex.place_entry(sym, sig.side, size, sig.stop_loss, sig.take_profit,
-                                    limit_price=bid if sig.side == "buy" else ask)
+            o = self.ex.place_entry(sym, st.side, size, st.stop_loss, st.runner_tp,
+                                    limit_price=bid if st.side == "buy" else ask)
         except Exception as e:
             log.info("%s post-only entry rejected (%s); will use market", sym, e)
             return False

@@ -30,6 +30,6 @@ def test_realized_ignores_older_trade_fills():
     trade = {"symbol": "ETHUSD", "side": "buy", "size": 3, "contract_value": 0.01,
              "entry_price": 2704.6, "opened_at": opened}
     pnl, fees, exit_price = make_trader(fills).realized(trade)
-    assert exit_price == pytest.approx((2710 * 2 + 2712) / 3)
+    assert exit_price == 2712  # last exit fill
     assert fees == pytest.approx(0.07)
-    assert pnl == pytest.approx((exit_price - 2704.6) * 3 * 0.01 - 0.07)
+    assert pnl == pytest.approx(((2710 - 2704.6) * 2 + (2712 - 2704.6)) * 0.01 - 0.07)

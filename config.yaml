@@ -9,18 +9,12 @@ exchange:
 
 trading:
   pairs: [BTCUSD, ETHUSD]   # perpetual futures
-  timeframe: 1h
+  timeframe: 4h             # chosen by 3y backtest: only timeframe positive in- and out-of-sample
+  # Entry/exit logic and trade management live in knowledge/core.yaml (+ core.md)
 
-strategy:
-  ema_fast: 20
-  ema_mid: 50
-  ema_slow: 200
-  rsi_len: 14
-  atr_len: 14
-  rsi_long_level: 45           # uptrend: RSI recovers above this after a pullback -> long
-  rsi_short_level: 55          # downtrend: RSI falls below this after a bounce -> short
-  news_strong_threshold: 0.5   # |news score| >= this counts as "strong news" (score in -1..1)
-  news_lookback_hours: 6
+news:
+  strong_threshold: 0.5     # |news score| >= this counts as "strong news" (score in -1..1)
+  lookback_hours: 6
 
 risk:
   max_leverage: 3
@@ -29,9 +23,6 @@ risk:
   daily_loss_limit_pct: 3.0    # stop trading for the day when hit
   require_stop_loss: true      # every order must carry a stop-loss
   require_take_profit: true    # every order must carry a target
-  stop_atr_mult: 2.0           # stop distance = 2 x ATR(14)
-  reward_risk: 2.0             # target distance = 2 x stop distance
-  max_hold_hours: 24           # close any position older than this
 
 storage:
   db_path: data/bot.db

@@ -25,7 +25,11 @@ CREATE TABLE IF NOT EXISTS trades (
     exit_price REAL,
     exit_reason TEXT,
     pnl REAL,                                  -- net of fees, USD
-    fees REAL
+    fees REAL,
+    tp1 REAL,                                  -- partial take-profit price
+    tp1_size INTEGER DEFAULT 0,                -- contracts booked at TP1
+    tp1_done INTEGER DEFAULT 0,
+    sl_current REAL                            -- stop after breakeven / trailing moves
 );
 CREATE TABLE IF NOT EXISTS events (
     ts REAL NOT NULL, level TEXT NOT NULL, msg TEXT NOT NULL
@@ -49,6 +53,11 @@ class DB:
         self.conn.row_factory = sqlite3.Row
         self.conn.execute("PRAGMA journal_mode=WAL")
         self.conn.executescript(SCHEMA)
+        cols = {r["name"] for r in self.conn.execute("PRAGMA table_info(trades)")}
+        for col, typ in (("tp1", "REAL"), ("tp1_size", "INTEGER DEFAULT 0"),
+                         ("tp1_done", "INTEGER DEFAULT 0"), ("sl_current", "REAL")):
+            if col not in cols:  # migrate databases created before swing management
+                self.conn.execute(f"ALTER TABLE trades ADD COLUMN {col} {typ}")
 
     # state
     def get(self, key: str, default: str | None = None) -> str | None:
