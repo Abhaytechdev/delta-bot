@@ -24,6 +24,7 @@ def test_default_config_is_valid(cfg):
         ("exchange", "ws_url", "wss://socket.india.delta.exchange"),
         ("risk", "max_leverage", 10),
         ("risk", "require_stop_loss", False),
+        ("risk", "require_take_profit", False),
     ],
 )
 def test_unsafe_values_rejected(cfg, section, key, value):
@@ -42,7 +43,7 @@ def test_env_with_loose_permissions_rejected(tmp_path):
 
 
 def test_secrets_repr_is_redacted():
-    s = Secrets("k1", "s1", "t1", "c1", "a1", "n1")
+    s = Secrets("k1", "s1", "a1", "n1")
     assert repr(s) == "Secrets(<redacted>)"
 
 

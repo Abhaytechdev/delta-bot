@@ -23,8 +23,6 @@ class ConfigError(Exception):
 class Secrets:
     delta_api_key: str
     delta_api_secret: str
-    telegram_bot_token: str
-    telegram_chat_id: str
     anthropic_api_key: str
     news_api_key: str
 
@@ -50,8 +48,6 @@ def load_secrets(env_path: Path | str = ROOT / ".env") -> Secrets:
     return Secrets(
         delta_api_key=os.getenv("DELTA_API_KEY", ""),
         delta_api_secret=os.getenv("DELTA_API_SECRET", ""),
-        telegram_bot_token=os.getenv("TELEGRAM_BOT_TOKEN", ""),
-        telegram_chat_id=os.getenv("TELEGRAM_CHAT_ID", ""),
         anthropic_api_key=os.getenv("ANTHROPIC_API_KEY", ""),
         news_api_key=os.getenv("NEWS_API_KEY", ""),
     )
@@ -76,6 +72,8 @@ def _validate(cfg: dict) -> None:
         raise ConfigError("risk.daily_loss_limit_pct must be in (0, 10]")
     if risk["require_stop_loss"] is not True:
         raise ConfigError("risk.require_stop_loss must be true")
+    if risk["require_take_profit"] is not True:
+        raise ConfigError("risk.require_take_profit must be true")
 
     if not cfg["trading"]["pairs"]:
         raise ConfigError("trading.pairs must not be empty")

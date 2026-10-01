@@ -17,6 +17,7 @@ risk:
   max_open_positions: 2
   daily_loss_limit_pct: 3.0    # stop trading for the day when hit
   require_stop_loss: true      # every order must carry a stop-loss
+  require_take_profit: true    # every order must carry a target
 
 storage:
   db_path: data/bot.db
@@ -26,5 +27,6 @@ logging:
   file: logs/bot.log
 
 report:
+  dir: reports
   timezone: Asia/Kolkata
   time: "23:55"

@@ -13,6 +13,7 @@ __pycache__/
 # Runtime data
 data/*
 !data/.gitkeep
+reports/*
 logs/*
 !logs/.gitkeep
 *.db
