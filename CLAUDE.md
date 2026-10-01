@@ -13,6 +13,7 @@ Hybrid strategy: news-driven + technical analysis.
 3. Never change strategy, risk settings, or live config on your own. Only suggest; I approve.
 4. Every order must have a stop-loss.
 5. Commit to git after every working change with a clear message.
+6. After every commit, also run git push.
 
 ## Risk rules (editable in config.yaml, defaults below)
 - Pairs: BTCUSD, ETHUSD perpetual
