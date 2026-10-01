@@ -91,5 +91,26 @@ The setup score is the sum of the weights of every concept present. Required for
 Shorts mirror all of the above.
 
 ---
+## Research notes (use these to improve the next version)
+
+Backtest: 3 years of Binance BTC/ETH candles, last 30% held out as out-of-sample (OOS).
+
+| Timeframe | In-sample avg R | OOS avg R |
+|---|---|---|
+| 30m | -0.19 | -0.20 |
+| 1h | -0.11 | -0.10 |
+| 2h | -0.07 | -0.01 |
+| **4h** | **+0.08** | **+0.12** |
+| 6h | -0.31 | +0.18 |
+| 1d | +0.01 | -0.27 |
+
+4h is the only timeframe positive in both periods, so the bot trades 4h. The edge is small
+(profit factor ~1.1) and needs live testnet confirmation.
+
+Ablation on 4h, in-sample only (avg R with one concept removed; baseline +0.076):
+- **Helps** (removing it hurts): sweep (-0.016), engulfing (-0.027), at_level (-0.023), ltf_trend (+0.006), discount (+0.022), volume_spike (+0.027), weekend penalty (+0.019), htf_trend (+0.047), strong_candle (+0.036)
+- **Neutral or slightly harmful**: pin_bar (+0.107), session_open (+0.101), compression (+0.087). These differences are within noise (about ±0.06R); revisit with more data before changing anything.
+- **Management**: TP1 at 2R + 30% booked = +0.076R. Breakeven + trail with no partial booking = +0.140R. TP1 at 1.5R = -0.029R. TP1 at 3R = +0.064R. The 30% partial is the owner's choice; this data suggests booking less (or nothing) earns more.
+
 ### Changelog
 - v1 (2026-10-01): initial version.

@@ -7,6 +7,7 @@ After each new candle closes: trail stops behind new swings, then look for setup
 """
 
 import argparse
+import fcntl
 import logging
 import logging.handlers
 import signal
@@ -372,6 +373,11 @@ def main() -> None:
     ap.add_argument("--once", action="store_true", help="run a single tick and exit")
     args = ap.parse_args()
     cfg = load_config()
+    lock = open(ROOT / "data" / "trader.lock", "w")
+    try:  # two bots on one account would double every order
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        sys.exit("another bot instance is already running")
     setup_logging(cfg)
     Trader(cfg).run(once=args.once)
 

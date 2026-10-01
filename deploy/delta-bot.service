@@ -1,0 +1,16 @@
+[Unit]
+Description=Delta Exchange trading bot (testnet)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=trader
+WorkingDirectory=/home/trader/delta-bot
+ExecStart=/home/trader/delta-bot/venv/bin/python -m bot.trader
+Restart=always
+RestartSec=30
+# stdout also goes to the journal: journalctl -u delta-bot -f
+
+[Install]
+WantedBy=multi-user.target
