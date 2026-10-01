@@ -95,8 +95,9 @@ class Trader:
         while not self._stop:
             try:
                 self.tick()
-            except Exception as e:
-                self.note("ERROR", f"tick failed: {type(e).__name__}: {e}")
+            except Exception as e:  # e.g. exchange outage; exchange-side SL/TP keep positions protected
+                msg = str(e).split("<html>")[0].strip()[:200]
+                self.note("ERROR", f"tick failed: {type(e).__name__}: {msg}")
             if once:
                 break
             time.sleep(POLL_S)
