@@ -11,6 +11,17 @@ trading:
   pairs: [BTCUSD, ETHUSD]   # perpetual futures
   timeframe: 1h
 
+strategy:
+  ema_fast: 20
+  ema_mid: 50
+  ema_slow: 200
+  rsi_len: 14
+  atr_len: 14
+  rsi_long_level: 45           # uptrend: RSI recovers above this after a pullback -> long
+  rsi_short_level: 55          # downtrend: RSI falls below this after a bounce -> short
+  news_strong_threshold: 0.5   # |news score| >= this counts as "strong news" (score in -1..1)
+  news_lookback_hours: 6
+
 risk:
   max_leverage: 3
   risk_per_trade_pct: 1.0      # % of balance risked per trade
