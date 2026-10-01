@@ -1,4 +1,4 @@
-# Core Trading Knowledge (v1)
+# Core Trading Knowledge (v2)
 
 The bot's "understanding" of the market. Every concept below has:
 - **Meaning**: what it tells us about the traders behind the price
@@ -35,7 +35,7 @@ A candle only means something **at a level, in context**. A hammer in the middle
 | Candle | Meaning | Bot detects |
 |---|---|---|
 | Bullish engulfing | Buyers overwhelmed the previous candle's sellers | Green body fully covers the previous red body |
-| Hammer / bullish pin bar | Sellers pushed down, buyers rejected it hard | Lower wick ≥ 2x body, close in the top third |
+| Hammer / bullish pin bar *(disabled in v2)* | Sellers pushed down, buyers rejected it hard | Lower wick ≥ 2x body, close in the top third |
 | Shooting star / bearish pin | Mirror: buyers rejected | Upper wick ≥ 2x body, close in the bottom third |
 | Strong bull candle (marubozu) | Conviction, little hesitation | Body ≥ 70% of range and range ≥ 1 ATR |
 | Doji | Indecision; meaningful only after a long move | Body ≤ 10% of range |
@@ -51,7 +51,15 @@ A candle only means something **at a level, in context**. A hammer in the middle
 | FOMO / over-extension | Price far from its average means latecomers are chasing; pullback risk is high | Distance from EMA(50) > `overextended_atr` x ATR in the trade direction: penalty |
 | Capitulation | Panic: huge candle, huge volume, long wick. Often marks the end of a move | Range > 2.5 ATR, volume spike, long wick against the move |
 | Volume spike | Real participation, not drift | Volume > `volume_spike` x 20-candle average |
-| Compression | Quiet market, energy building; the breakout tends to be large | ATR below `compression` x its 100-candle median |
+| Compression *(disabled in v2)* | Quiet market, energy building; the breakout tends to be large | ATR below `compression` x its 100-candle median |
+
+## 3b. Extra liquidity levels (tested in v2, currently disabled with weight 0)
+
+| Concept | Meaning | Bot detects |
+|---|---|---|
+| Previous-day high/low sweep | Yesterday's extremes hold many stops | Low below yesterday's low, close back above (and mirror) |
+| Fair value gap (FVG) retest | A 3-candle imbalance tends to get revisited | Price dips into the latest unfilled gap and holds |
+| Round numbers | Humans cluster orders at 80,000 / 2,500 / 0.25 | Wick within 0.25 ATR of a round level, close away from it |
 
 ## 4. Sessions and time (when big moves happen)
 
@@ -65,7 +73,7 @@ Crypto trades 24/7, but traditional markets drive volume.
 | Sat–Sun | weekend | Thin liquidity, fake moves, wicks: lower trust |
 | Sun 22:00–Mon 02:00 | Mon 03:30–07:30 | CME bitcoin futures reopen after the weekend gap; price often reacts to the gap |
 
-Bot detects: the hour of the trigger candle. Inside a London/US open window it gets `+session_open`; on a weekend it gets `weekend` (a penalty).
+Bot detects: the hour of the trigger candle. Inside a London/US open window it got `+session_open` (*disabled in v2, no edge*); on a weekend it gets `weekend` (a penalty).
 
 Not simulated yet: scheduled macro events (CPI, FOMC, jobs data). Planned: an event calendar that blocks new entries ±2h around them.
 
@@ -85,7 +93,7 @@ News is a helper, not the strategy. Strong news **in** the trade direction adds 
 
 The setup score is the sum of the weights of every concept present. Required for a long:
 - Trend context: higher-timeframe uptrend, or a lower-timeframe uptrend with a higher-timeframe range
-- At least one trigger: sweep, engulfing, pin bar, or a strong candle at a level
+- At least one trigger with a non-zero weight: sweep, engulfing, strong candle, or break of structure
 - Score ≥ `min_score`
 
 Shorts mirror all of the above.
@@ -115,3 +123,8 @@ Ablation on 4h, in-sample only (avg R with one concept removed; baseline +0.076)
 ### Changelog
 - v1 (2026-10-01): initial version.
 - v1.1 (2026-10-01): tp1_fraction 0.30 -> 0.0 (owner-approved trial). 4h backtest: in-sample +0.076R -> +0.140R, out-of-sample +0.115R -> +0.125R per trade.
+- v2 (2026-10-01): removed pin bar, session open, compression (all hurt in two ablations). Tested and rejected:
+  previous-day high/low sweep, FVG retest, round numbers (each lowered avg R), and lower-timeframe entries
+  (4h setup + 1h/30m/15m entry: all negative, the tight stops get eaten by fees and noise). Added ADAUSD,
+  max positions 3. Result, BTC+ETH+ADA 4h: in-sample +0.234R, out-of-sample +0.196R per trade
+  (+26.6% over ~11 months, max drawdown 21%, ~3.8 trades/week).

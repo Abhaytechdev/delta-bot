@@ -31,8 +31,9 @@ from bot.exchange import RESOLUTION_SECONDS
 from bot.risk import ist_day, size_position
 
 BINANCE = "https://data-api.binance.vision/api/v3/klines?symbol={s}&interval={tf}&limit=1000&startTime={t}"
-SYMBOL_MAP = {"BTCUSD": "BTCUSDT", "ETHUSD": "ETHUSDT"}
-CONTRACT_VALUE = {"BTCUSD": 0.001, "ETHUSD": 0.01}
+SYMBOL_MAP = {"BTCUSD": "BTCUSDT", "ETHUSD": "ETHUSDT", "SOLUSD": "SOLUSDT", "XRPUSD": "XRPUSDT",
+              "ADAUSD": "ADAUSDT", "DOGEUSD": "DOGEUSDT"}
+CONTRACT_VALUE = {"BTCUSD": 0.001, "ETHUSD": 0.01, "SOLUSD": 1, "XRPUSD": 1, "ADAUSD": 1, "DOGEUSD": 100}
 FEE = 0.0005 * 1.18          # taker + GST, per fill
 STOP_SLIPPAGE = 0.0002
 
@@ -76,11 +77,20 @@ class Trade:
         return self.pnl / self.risk_usd
 
 
-def run(cfg: dict, k: dict, tf: str, days: int, balance: float) -> tuple[list[Trade], list[tuple[int, float]], dict]:
+def run(cfg: dict, k: dict, tf: str, days: int, balance: float,
+        setup_tf: str | None = None) -> tuple[list[Trade], list[tuple[int, float]], dict]:
+    """tf = entry timeframe; setup_tf (optional) = timeframe for trend/zones context."""
     pairs, risk = cfg["trading"]["pairs"], cfg["risk"]
     m = k["management"]
     tfs = RESOLUTION_SECONDS[tf]
-    frames = {s: brain.analyze(load_candles(s, tf, days), k, tfs) for s in pairs}
+    frames = {}
+    for s in pairs:
+        if setup_tf:
+            frames[s] = brain.analyze(load_candles(s, tf, days), k, tfs,
+                                      load_candles(s, setup_tf, days), RESOLUTION_SECONDS[setup_tf])
+        else:
+            frames[s] = brain.analyze(load_candles(s, tf, days), k, tfs)
+    rows = {s: list(frames[s].itertuples(index=False)) for s in pairs}
     idx = {s: {t: i for i, t in enumerate(frames[s]["time"])} for s in pairs}
     times = sorted(set.intersection(*(set(idx[s]) for s in pairs)))
 
@@ -107,8 +117,8 @@ def run(cfg: dict, k: dict, tf: str, days: int, balance: float) -> tuple[list[Tr
         if d_ != day:
             day, day_start, day_halt = d_, balance, False
         for s in pairs:
-            df, i, cv = frames[s], idx[s][ts], CONTRACT_VALUE[s]
-            bar = df.iloc[i]
+            i, cv = idx[s][ts], CONTRACT_VALUE[s]
+            bar = rows[s][i]
             # 1) fill pending entry at the open
             st = pending.pop(s, None)
             if st is not None and s not in open_:
@@ -166,7 +176,7 @@ def run(cfg: dict, k: dict, tf: str, days: int, balance: float) -> tuple[list[Tr
         # 3) equity and daily loss limit
         unreal = 0.0
         for t in open_.values():
-            c = float(frames[t.symbol].iloc[idx[t.symbol][ts]].close)
+            c = float(rows[t.symbol][idx[t.symbol][ts]].close)
             unreal += (c - t.entry) * (1 if t.side == "buy" else -1) * t.left * CONTRACT_VALUE[t.symbol]
         eq = balance + unreal
         equity.append((int(ts), eq))
@@ -176,7 +186,7 @@ def run(cfg: dict, k: dict, tf: str, days: int, balance: float) -> tuple[list[Tr
         for s in pairs:
             if s in open_ or s in pending:
                 continue
-            st = brain.setup_at(frames[s], idx[s][ts], k)
+            st = brain.setup_from_rows(rows[s], idx[s][ts], k)
             if not st:
                 continue
             if day_halt:
@@ -220,7 +230,9 @@ def line(label: str, s: dict) -> str:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--tf", nargs="+", default=["30m", "1h", "2h", "4h"])
+    ap.add_argument("--tf", nargs="+", default=["30m", "1h", "2h", "4h"], help="entry timeframe(s)")
+    ap.add_argument("--pairs", nargs="+", help="override pairs, e.g. BTCUSD SOLUSD")
+    ap.add_argument("--setup-tf", help="context timeframe for trend/zones, e.g. 4h")
     ap.add_argument("--days", type=int, default=1095)
     ap.add_argument("--balance", type=float, default=1000.0)
     ap.add_argument("--oos", type=float, default=0.3, help="out-of-sample fraction at the end")
@@ -228,11 +240,13 @@ def main() -> None:
     args = ap.parse_args()
 
     cfg, k = load_config(), brain.load_knowledge()
+    if args.pairs:
+        cfg["trading"]["pairs"] = args.pairs
     for tf in args.tf:
-        trades, equity, skipped = run(cfg, k, tf, args.days, args.balance)
+        trades, equity, skipped = run(cfg, k, tf, args.days, args.balance, args.setup_tf)
         t0, t1 = equity[0][0], equity[-1][0] + 1
         cut = int(t0 + (t1 - t0) * (1 - args.oos))
-        print(f"{tf}:")
+        print(f"{args.setup_tf + ' setup / ' if args.setup_tf else ''}{tf} entry:")
         print(line("in-sample", summarize(trades, equity, t0, cut)))
         print(line("OUT-OF-SAMPLE", summarize(trades, equity, cut, t1)))
         exits: dict[str, int] = {}

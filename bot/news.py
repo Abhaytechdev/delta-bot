@@ -28,6 +28,10 @@ FEEDS = [
 COIN_TERMS = {
     "BTCUSD": re.compile(r"\b(bitcoin|btc)\b", re.I),
     "ETHUSD": re.compile(r"\b(ethereum|eth|ether)\b", re.I),
+    "ADAUSD": re.compile(r"\b(cardano|ada)\b", re.I),
+    "SOLUSD": re.compile(r"\b(solana|sol)\b", re.I),
+    "XRPUSD": re.compile(r"\b(xrp|ripple)\b", re.I),
+    "DOGEUSD": re.compile(r"\b(dogecoin|doge)\b", re.I),
 }
 MARKET_TERMS = re.compile(r"\b(crypto|cryptocurrency|market|sec|fed|etf|stablecoin|regulat\w*)\b", re.I)
 

@@ -66,3 +66,27 @@ def test_news_against_blocks_setup():
             blocked = brain.setup_at(df, i, k, news=-0.9 if s.side == "buy" else 0.9)
             assert blocked is None or blocked.side != s.side
             return
+
+
+def test_no_lookahead_multi_timeframe():
+    rng = np.random.default_rng(1)
+    c = 100 + np.cumsum(rng.normal(0, 1, 3200))
+    ltf = frame(c + 1, c - 1, c, np.r_[c[0], c[:-1]])  # 1h candles
+    g = ltf.assign(grp=ltf["time"] // 14400).groupby("grp")
+    htf = pd.DataFrame({"time": g["time"].first(), "open": g["open"].first(), "high": g["high"].max(),
+                        "low": g["low"].min(), "close": g["close"].last(), "volume": g["volume"].sum()}).reset_index(drop=True)
+    k = brain.load_knowledge()
+    cut = 2400
+    full = brain.analyze(ltf, k, 3600, htf, 14400)
+    part = brain.analyze(ltf.iloc[:cut], k, 3600, htf[htf["time"] < ltf["time"].iloc[cut - 1]], 14400)
+    cols = ["ctx_trend", "ctx_htf_trend", "ctx_sl1", "ctx_zl1", "ctx_atr"]
+    pd.testing.assert_frame_equal(full[cols].iloc[:cut].reset_index(drop=True), part[cols].reset_index(drop=True))
+
+
+def test_fvg_and_previous_day_sweep():
+    from bot import levels
+    # bullish gap between candle 0 high (10) and candle 2 low (11), then a dip into it that holds
+    df = frame(highs=[10, 12, 13, 12.5], lows=[9, 10.5, 11, 10.6], closes=[9.8, 11.8, 12.8, 11.5])
+    df["atr"] = 1.0
+    out = levels.annotate(df)
+    assert not out["fvg_long"].iloc[2] and out["fvg_long"].iloc[3]

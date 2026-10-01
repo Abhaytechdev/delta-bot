@@ -47,7 +47,8 @@ def test_daily_loss_limit(rm):
 def test_max_positions_and_duplicates(rm):
     rm.roll_day(time.time(), 100.0)
     assert not rm.can_open("BTCUSD", {"BTCUSD"}, 100)[0]
-    assert not rm.can_open("SOLUSD", {"BTCUSD", "ETHUSD"}, 100)[0]
+    full = {f"P{i}" for i in range(rm.risk["max_open_positions"])}
+    assert not rm.can_open("SOLUSD", full, 100)[0]
 
 
 def test_kill_switch(rm):

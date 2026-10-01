@@ -1,5 +1,5 @@
 # Machine-readable parameters for knowledge/core.md. Keep both in sync.
-version: 1
+version: 2
 
 structure:
   swing_left: 3          # candles before a swing point
@@ -22,12 +22,16 @@ weights:
   discount: 1.0
   sweep: 2.0
   engulfing: 1.5
-  pin_bar: 1.5
+  pin_bar: 0          # v2: removed, hurt results in two ablations
   strong_candle: 1.0
   bos: 1.0
+  entry_trend: 0      # multi-timeframe mode only
+  pd_sweep: 0         # tested v2: lowered avg R
+  fvg: 0              # tested v2: lowered avg R
+  round_level: 0      # tested v2: lowered avg R
   volume_spike: 0.5
-  compression: 0.5
-  session_open: 0.5
+  compression: 0      # v2: removed (no edge)
+  session_open: 0     # v2: removed (no edge)
   weekend: -1.0
   overextended: -2.0
   news_aligned: 1.0

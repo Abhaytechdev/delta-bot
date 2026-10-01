@@ -13,8 +13,9 @@ def annotate(df: pd.DataFrame, left: int, right: int, zone_memory: int) -> pd.Da
     n = len(df)
     highs: list[float] = []  # confirmed swing high prices, oldest first
     lows: list[float] = []
+    zone_cols = [f"zl{z}" for z in range(1, zone_memory + 1)] + [f"zh{z}" for z in range(1, zone_memory + 1)]
     cols = {k: np.full(n, np.nan) for k in (
-        "sh1", "sh2", "sl1", "sl2", "trend", "leg_low", "leg_high", "near_support", "near_resistance")}
+        "sh1", "sh2", "sl1", "sl2", "trend", "leg_low", "leg_high", "near_support", "near_resistance", *zone_cols)}
     leg_low = leg_high = np.nan  # the low that started the last up-leg / high that started the last down-leg
     last_kind = None
     for i in range(n):
@@ -40,6 +41,10 @@ def annotate(df: pd.DataFrame, left: int, right: int, zone_memory: int) -> pd.Da
             cols["leg_low"][i], cols["leg_high"][i] = leg_low, leg_high
             cols["near_support"][i] = min(abs(l[i] - z) for z in lows[-zone_memory:])
             cols["near_resistance"][i] = min(abs(h[i] - z) for z in highs[-zone_memory:])
+            for z, v in enumerate(reversed(lows[-zone_memory:]), 1):
+                cols[f"zl{z}"][i] = v
+            for z, v in enumerate(reversed(highs[-zone_memory:]), 1):
+                cols[f"zh{z}"][i] = v
     out = df.copy()
     for k, v in cols.items():
         out[k] = v

@@ -12,7 +12,7 @@ def cfg():
 
 def test_default_config_is_valid(cfg):
     assert cfg["exchange"]["environment"] == "testnet"
-    assert cfg["trading"]["pairs"] == ["BTCUSD", "ETHUSD"]
+    assert cfg["trading"]["pairs"][:2] == ["BTCUSD", "ETHUSD"]
     assert cfg["risk"]["max_leverage"] == 3
 
 
