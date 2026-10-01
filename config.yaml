@@ -1,0 +1,30 @@
+# Delta bot configuration. Secrets go in .env, never here.
+# Changes to strategy/risk settings require owner approval.
+
+exchange:
+  # Only "testnet" is allowed until the owner says "go live".
+  environment: testnet
+  rest_url: https://cdn-ind.testnet.deltaex.org
+  ws_url: wss://socket-ind.testnet.deltaex.org
+
+trading:
+  pairs: [BTCUSD, ETHUSD]   # perpetual futures
+  timeframe: 15m
+
+risk:
+  max_leverage: 3
+  risk_per_trade_pct: 1.0      # % of balance risked per trade
+  max_open_positions: 2
+  daily_loss_limit_pct: 3.0    # stop trading for the day when hit
+  require_stop_loss: true      # every order must carry a stop-loss
+
+storage:
+  db_path: data/bot.db
+
+logging:
+  level: INFO
+  file: logs/bot.log
+
+report:
+  timezone: Asia/Kolkata
+  time: "23:55"
