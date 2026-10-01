@@ -10,7 +10,7 @@ Hybrid strategy: news-driven + technical analysis.
 ## Hard safety rules (NEVER break these)
 1. DEMO/TESTNET ONLY until I explicitly say "go live". Never use production API URLs or live keys without my approval.
 2. API keys only in .env (chmod 600). Never print, log, or commit keys. .env must be in .gitignore.
-3. Never change strategy, risk settings, or live config on your own. Only suggest; I approve.
+3. Claude may research and change strategy/risk settings for backtesting and testnet, and must explain every such change in the end-of-task summary. Real-money / production settings change only with my approval.
 4. Every order must have a stop-loss AND a target (take-profit).
 5. Commit to git after every working change with a clear message.
 6. After every commit, also run git push.
@@ -49,4 +49,4 @@ Hybrid strategy: news-driven + technical analysis.
 7. News module
 8. Backtesting
 9. Daily report
-Work step by step. After each step, explain what you did and wait for my OK before the next.
+Work autonomously through the steps; don't stop to ask for OK after each one. Commit + push as you go, and give a short summary (in Hinglish) at the end.
