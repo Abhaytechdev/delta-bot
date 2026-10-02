@@ -19,5 +19,7 @@ def annotate(df: pd.DataFrame, k: dict) -> pd.DataFrame:
     big = rng > k["capitulation_atr"] * df["atr"]
     out["capitulation_low"] = big & out["volume_spike"] & (df["close_pos"] > 0.5)   # panic sold, then bought
     out["capitulation_high"] = big & out["volume_spike"] & (df["close_pos"] < 0.5)
+    # how far price already moved over the last 6 candles (in ATR): chasing vs buying a pullback
+    out["recent_move"] = (df["close"] - df["close"].shift(6)) / df["atr"]
     out["compression"] = (df["atr"] / df["atr"].rolling(100).median()).shift() < k["compression"]
     return out

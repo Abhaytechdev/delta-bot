@@ -144,6 +144,24 @@ whole system's net (+128R). Losers cost -395R. **Without the big winners the sys
 Conclusion: fixed or near targets cut off the fat tail and turn the system negative. Early breakeven
 (1R) gives a smoother ride and a higher win rate but less total profit over 3 years (~90R vs ~128R).
 
+## Loser analysis (2026-10-02, in-sample 399 trades)
+
+Bucket tables suggested strong patterns: chasing after the move (-0.05R vs +0.55R after a pullback),
+"strong candle" entries (-0.37R), no 4h structure alignment (+0.03R vs +0.52R), stops > 2 ATR.
+Turned into rules (optional knobs `entry.max_chase_atr`, `entry.require_ltf_trend`; off by default):
+
+| Rule | In-sample avg R | Out-of-sample avg R |
+|---|---|---|
+| current v2 | +0.234 | **+0.196** |
+| no chase (recent 6-candle move <= 0) | +0.258 | +0.100 |
+| no chase + 4h structure + no strong candle | +0.290 | +0.056 |
+
+They did not survive out-of-sample: bucket patterns on a few hundred trades are mostly noise.
+The ~65% loss rate is structural for this system: stops sit at nearby structure, 48% of trades never
+reach +1R, and the edge comes from a few 5-10R winners (average win 2.7R vs average loss 1.05R).
+Next ideas need new information, not more slicing of the same data: market regime (trend vs range),
+funding rate / open interest, longer history, live testnet trades.
+
 ### Changelog
 - v1 (2026-10-01): initial version.
 - v1.1 (2026-10-01): tp1_fraction 0.30 -> 0.0 (owner-approved trial). 4h backtest: in-sample +0.076R -> +0.140R, out-of-sample +0.115R -> +0.125R per trade.

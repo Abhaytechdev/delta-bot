@@ -110,6 +110,11 @@ def _score(r, k: dict, d: int, news: float, news_strong: float) -> tuple[float, 
         add("ltf_trend", "HH/HL" if d > 0 else "LH/LL")
     if not (htf_ok or ltf_ok):
         return score, why, False
+    e = k["entry"]
+    if e.get("require_ltf_trend") and r.ctx_trend != d:
+        return score, why, False  # setup-timeframe structure must agree
+    if e.get("max_chase_atr") is not None and r.recent_move * d > e["max_chase_atr"]:
+        return score, why, False  # price already ran in our direction: chasing
     if r.mtf and r.trend == d:
         add("entry_trend", "entry-TF structure agrees")
 
