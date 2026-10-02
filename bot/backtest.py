@@ -218,6 +218,20 @@ def run(cfg: dict, k: dict, tf: str, days: int, balance: float,
                         trades.append(t)
                         del open_[s]
                         continue
+                    if any(m.get(x) is not None for x in
+                           ("exit_opposite_setup", "exit_against_closes", "exit_ema_cross", "exit_giveback")):
+                        opp = False
+                        if m.get("exit_opposite_setup") is not None:
+                            o = brain.setup_from_rows(rows[s], idx[s][ts], k)
+                            opp = o is not None and o.side != t.side
+                        why = manage.reversal_exit(t.side, t.entry, t.sl0, t.best, rows[s], idx[s][ts], opp, m)
+                        if why:
+                            fill(t, t.left, float(bar.close), cv)
+                            t.exit_reason = why
+                            t.closed = int(ts)
+                            trades.append(t)
+                            del open_[s]
+                            continue
                     new_sl = manage.new_stop(t.side, t.entry, t.sl0, t.sl, t.best, bar, m, k)  # next candle
                     if new_sl != t.sl:
                         t.sl = new_sl

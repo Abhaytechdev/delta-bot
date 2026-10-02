@@ -238,6 +238,27 @@ rare short signal. Nothing found yet gives the entries a robust edge over random
 Dropping concepts does not help. Long-only is slightly better per trade and in drawdown in both periods
 but earns less overall and drops the short side of the original goal. Kept as an option (`sides`), not live.
 
+## Reversal-exit research (2026-10-02, 6 years with funding, BTC+ETH+ADA 4h)
+
+Idea: leave a profitable trade early when the market turns (opposite setup, closes against us, EMA20 cross,
+giving back part of the profit). Implemented as optional `management.exit_*` keys (off), shared rules in
+`bot/manage.py` `reversal_exit`.
+
+| Exit rule | Unseen 2020-23 avg R | Dev 2023-26 avg R | Dev win rate |
+|---|---|---|---|
+| **baseline (current)** | -0.045 | **+0.210** | 30% |
+| opposite setup appears (in profit) | -0.067 | +0.081 | |
+| opposite setup (>= 1R) | -0.087 | +0.100 | 30% |
+| 2 closes against after 1.5R | -0.017 | +0.079 | 36% |
+| 3 closes against after 1.5R | -0.027 | +0.160 | 34% |
+| 2 closes against after 1R | +0.005 | +0.086 | 41% |
+| EMA20 cross against after 1.5R | +0.005 | +0.078 | 34% |
+| give back 50% of best profit | -0.005 | +0.039 | 38% |
+
+No variant improved both periods. They raise the win rate (30% -> 34-41%) and help a little on the weak
+unseen period, but cut the dev profit by half or more. Same lesson as the fixed-target test: the system earns
+from the few trades that run far, and any rule that exits early on a pullback cuts those too.
+
 ### Changelog
 - v1 (2026-10-01): initial version.
 - v1.1 (2026-10-01): tp1_fraction 0.30 -> 0.0 (owner-approved trial). 4h backtest: in-sample +0.076R -> +0.140R, out-of-sample +0.115R -> +0.125R per trade.
