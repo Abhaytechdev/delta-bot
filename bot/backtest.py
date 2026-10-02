@@ -20,12 +20,12 @@ import json
 import math
 import time
 import urllib.request
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
 import pandas as pd
 
-from bot import brain
+from bot import brain, manage
 from bot.config import ROOT, load_config
 from bot.exchange import RESOLUTION_SECONDS
 from bot.risk import ist_day, size_position
@@ -66,6 +66,10 @@ class Trade:
     risk_usd: float
     opened: int
     reason: str
+    sl0: float = 0.0       # initial stop
+    best: float = 0.0      # best price reached so far
+    bars: int = 0          # candles held
+    partials_done: set = field(default_factory=set)
     left: int = 0          # contracts still open
     tp1_done: bool = False
     pnl: float = 0.0       # realised, net of fees
@@ -135,7 +139,8 @@ def run(cfg: dict, k: dict, tf: str, days: int, balance: float,
                     else:
                         d = 1 if long else -1
                         t = Trade(s, st.side, sz.contracts, entry, st.stop_loss, entry + d * dist * m["tp1_r"],
-                                  entry + d * dist * m["runner_r"], sz.risk_usd, int(ts), st.reason, left=sz.contracts)
+                                  entry + d * dist * manage.final_target_r(m), sz.risk_usd, int(ts), st.reason,
+                                  sl0=st.stop_loss, best=entry, left=sz.contracts)
                         fee = entry * sz.contracts * cv * FEE
                         t.pnl -= fee
                         balance -= fee
@@ -152,16 +157,16 @@ def run(cfg: dict, k: dict, tf: str, days: int, balance: float,
                     fill(t, t.left, px, cv)
                     t.exit_reason = "breakeven/trail" if t.tp1_done else "stop_loss"
                 else:
-                    if not t.tp1_done and reach(t.tp1):
-                        part = int(round(t.size * m["tp1_fraction"]))
-                        if 0 < part < t.left:
-                            fill(t, part, t.tp1, cv)
-                        t.tp1_done = True
-                        be = t.entry * (1 + m["be_fee_buffer"]) if long else t.entry * (1 - m["be_fee_buffer"])
-                        t.sl = max(t.sl, be) if long else min(t.sl, be)
-                    if t.tp1_done and reach(t.runner):
+                    for n, (r_lvl, frac) in enumerate(m.get("partials") or []):
+                        px = manage.level(t.side, t.entry, t.sl0, r_lvl)
+                        if n not in t.partials_done and reach(px):
+                            t.partials_done.add(n)
+                            part = int(round(t.size * frac))
+                            if 0 < part < t.left:
+                                fill(t, part, px, cv)
+                    if reach(t.runner):
                         fill(t, t.left, t.runner, cv)
-                        t.exit_reason = "runner_target"
+                        t.exit_reason = "target"
                     elif ts + tfs - t.opened >= m["max_hold_days"] * 86400:
                         fill(t, t.left, float(bar.close), cv)
                         t.exit_reason = "max_hold"
@@ -169,10 +174,21 @@ def run(cfg: dict, k: dict, tf: str, days: int, balance: float,
                     t.closed = int(ts)
                     trades.append(t)
                     del open_[s]
-                elif t.tp1_done:  # trail behind the latest confirmed swing, effective next candle
-                    lvl = brain.trail_level(bar, t.side, k)
-                    if lvl is not None:
-                        t.sl = max(t.sl, lvl) if long else min(t.sl, lvl)
+                else:
+                    t.best = max(t.best, bar.high) if long else min(t.best, bar.low)
+                    t.bars += 1
+                    if (m.get("stale_candles") and t.bars >= m["stale_candles"]
+                            and manage.r_multiple(t.side, t.entry, t.sl0, t.best) < m["stale_r"]):
+                        fill(t, t.left, float(bar.close), cv)
+                        t.exit_reason = "stale"
+                        t.closed = int(ts)
+                        trades.append(t)
+                        del open_[s]
+                        continue
+                    new_sl = manage.new_stop(t.side, t.entry, t.sl0, t.sl, t.best, bar, m, k)  # next candle
+                    if new_sl != t.sl:
+                        t.sl = new_sl
+                        t.tp1_done = (new_sl - t.entry) * (1 if long else -1) >= 0
         # 3) equity and daily loss limit
         unreal = 0.0
         for t in open_.values():

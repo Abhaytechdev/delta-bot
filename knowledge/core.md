@@ -120,6 +120,30 @@ Ablation on 4h, in-sample only (avg R with one concept removed; baseline +0.076)
 - **Neutral or slightly harmful**: pin_bar (+0.107), session_open (+0.101), compression (+0.087). These differences are within noise (about ±0.06R); revisit with more data before changing anything.
 - **Management**: TP1 at 2R + 30% booked = +0.076R. Breakeven + trail with no partial booking = +0.140R. TP1 at 1.5R = -0.029R. TP1 at 3R = +0.064R. The 30% partial is the owner's choice; this data suggests booking less (or nothing) earns more.
 
+## Exit research (2026-10-02, BTC+ETH+ADA 4h, 575 trades)
+
+How far trades run before the initial stop:
+- 52% reach +1R, but 72% of those come back to the original stop if left unprotected
+- 35% reach 2R, 18% reach 5R, 8% reach 10R
+- Median time: 1R in 0.5 days, 2R in 1.5 days, 5R in ~4 days
+
+Where the profit comes from: the 6% of trades that reach 5R or more made +316R. That is more than the
+whole system's net (+128R). Losers cost -395R. **Without the big winners the system loses money.**
+
+| Exit rule | In-sample avg R | Out-of-sample avg R | OOS win rate | OOS max DD |
+|---|---|---|---|---|
+| **Current: BE at 2R, trail at 2R, runner 10R** | **+0.234** | +0.196 | 36% | 21% |
+| BE at 1R | +0.093 | +0.198 | 48% | 16% |
+| Fixed target 2R | -0.076 | -0.013 | 35% | 27% |
+| Fixed target 3R | -0.087 | | | |
+| 50% booked at 2R | +0.100 | +0.120 | 37% | 18% |
+| Step locks (1.5R->BE, 2R->+1R, 3R->+2R) | +0.024 | | | |
+| Runner 5R instead of 10R | +0.086 | | | |
+| Exit if < 0.5R after 2 days | +0.231 | +0.163 | 35% | 21% |
+
+Conclusion: fixed or near targets cut off the fat tail and turn the system negative. Early breakeven
+(1R) gives a smoother ride and a higher win rate but less total profit over 3 years (~90R vs ~128R).
+
 ### Changelog
 - v1 (2026-10-01): initial version.
 - v1.1 (2026-10-01): tp1_fraction 0.30 -> 0.0 (owner-approved trial). 4h backtest: in-sample +0.076R -> +0.140R, out-of-sample +0.115R -> +0.125R per trade.

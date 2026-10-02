@@ -44,8 +44,16 @@ management:
   sl_buffer_atr: 0.25
   min_stop_atr: 0.75
   max_stop_atr: 4.0
-  tp1_r: 2.0
+  tp1_r: 2.0             # live bot: TP1 level (breakeven trigger); kept equal to be_r
   tp1_fraction: 0.0     # trial: no partial booking, TP1 only moves SL to breakeven (was 0.30)
+  be_r: 2.0              # move SL to breakeven + fees at this R
+  trail_start_r: 2.0     # trail behind swings from this R
+  lock_steps: []         # [[trigger_R, lock_R], ...]
+  chandelier_atr: 0      # 0 = off
+  partials: []           # [[R, fraction], ...]
+  target_r: 0            # 0 = no fixed target (runner only)
+  stale_candles: 0       # 0 = off
+  stale_r: 0
   be_fee_buffer: 0.0015  # move SL to entry +/- 0.15% (covers round-trip fees)
   trail_buffer_atr: 0.25
   runner_r: 10.0

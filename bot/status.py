@@ -57,7 +57,8 @@ def main() -> None:
 
     print("\nRecent events:")
     for e in db.conn.execute("SELECT * FROM events ORDER BY ts DESC LIMIT 8").fetchall()[::-1]:
-        print(f"  {datetime.fromtimestamp(e['ts'], tz).strftime('%m-%d %H:%M')} {e['level']:5} {e['msg']}")
+        msg = e["msg"].split("<html>")[0].strip()[:160]
+        print(f"  {datetime.fromtimestamp(e['ts'], tz).strftime('%m-%d %H:%M')} {e['level']:5} {msg}")
 
 
 if __name__ == "__main__":
