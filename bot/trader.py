@@ -26,7 +26,7 @@ from bot.risk import RiskManager, size_position
 
 log = logging.getLogger("bot")
 
-POLL_S = 30
+POLL_S = 10
 CANDLES = 1300           # history for indicators, higher-timeframe structure and daily trend (EMA200 of days)
 CANDLE_DELAY_S = 10      # wait after candle close for the exchange to finalise it
 ENTRY_WAIT_S = 60        # how long a post-only limit entry may rest
