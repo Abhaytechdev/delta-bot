@@ -94,12 +94,19 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--days", type=int, default=2190)
     ap.add_argument("--pairs", nargs="+", default=["BTCUSD", "ETHUSD", "ADAUSD"])
+    ap.add_argument("--keep-days", type=int, default=0, help="delete cached days older than this (0 = keep all)")
     args = ap.parse_args()
     for s in args.pairs:
         t = time.time()
         download(s, args.days)
         n = len([f for f in (DIR / SYMBOL_MAP[s]).glob("*.csv") if f.stat().st_size])
         print(f"{s}: {n} days cached ({time.time() - t:.0f}s)", flush=True)
+        if args.keep_days:
+            cutoff = str(date.today() - timedelta(days=args.keep_days))
+            old = [f for f in (DIR / SYMBOL_MAP[s]).glob("*.csv") if f.stem < cutoff]
+            for f in old:
+                f.unlink()
+            print(f"{s}: removed {len(old)} days older than {cutoff}", flush=True)
 
 
 if __name__ == "__main__":
