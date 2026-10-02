@@ -185,6 +185,24 @@ funding rate / open interest, longer history, live testnet trades.
 | only with daily trend | +0.317 | +0.294 | +21.3% (half the trades) | 23.1% |
 | **half risk against daily trend (adopted)** | +0.243 | +0.196 | **+28.0%** | **18.4%** |
 
+## Robustness research (2026-10-02): the most important result so far
+
+1. **Never-seen data (Oct 2020 - Oct 2023, 6-year backtest with funding costs):** v2.1 = **-0.045R/trade,
+   -30%, max DD 56%**. Development period (Oct 2023 - Oct 2026) = +0.21R. By year: 2021 +0.17, 2022 -0.22,
+   2023 -0.04, 2024 +0.01, 2025 +0.39, 2026 +0.27. The good numbers came mostly from 2025-26.
+2. **Random entries with the same management beat the knowledge entries** (avg of 5 seeds, funding included):
+   unseen +0.04R, dev +0.25R. Random long-only: +0.11R / +0.26R. Random short-only: about -0.05R.
+   Engine sanity check: random entries + fixed 2R target = -0.02R (about the fees), so the engine is not biased.
+3. Trend-direction rules with random timing (daily EMA50/200, 90-day return sign) did worse than random.
+4. Live bot decisions match the backtest exactly (both live trades replayed: same side and stop).
+5. Funding costs (~0.03%/day for longs) are now in the backtest.
+
+**Meaning:** the profit so far comes from the trade management (let winners run with a trailing stop)
+plus crypto's long-term up-drift, not from the entry knowledge. The entry concepts in sections 1-4 have
+not shown edge over random entries on 6 years of data. Next research must find entry information with
+real edge (e.g. crowd positioning: funding rate / open interest extremes, liquidations), validated on the
+never-seen 2020-2023 period before it is trusted.
+
 ### Changelog
 - v1 (2026-10-01): initial version.
 - v1.1 (2026-10-01): tp1_fraction 0.30 -> 0.0 (owner-approved trial). 4h backtest: in-sample +0.076R -> +0.140R, out-of-sample +0.115R -> +0.125R per trade.

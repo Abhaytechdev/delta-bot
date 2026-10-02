@@ -36,6 +36,27 @@ SYMBOL_MAP = {"BTCUSD": "BTCUSDT", "ETHUSD": "ETHUSDT", "SOLUSD": "SOLUSDT", "XR
 CONTRACT_VALUE = {"BTCUSD": 0.001, "ETHUSD": 0.01, "SOLUSD": 1, "XRPUSD": 1, "ADAUSD": 1, "DOGEUSD": 100}
 FEE = 0.0005 * 1.18          # taker + GST, per fill
 STOP_SLIPPAGE = 0.0002
+FUNDING_ON = True            # charge perpetual funding while a position is open
+
+
+FUNDING = "https://fapi.binance.com/fapi/v1/fundingRate?symbol={s}&limit=1000&startTime={t}"
+
+
+def load_funding(symbol: str, days: int) -> pd.Series:
+    """Perpetual funding rates (Binance USDT perps as a proxy), indexed by funding time (s)."""
+    path = ROOT / "data" / f"funding_{SYMBOL_MAP[symbol]}_{days}d.json"
+    if not path.exists() or time.time() - path.stat().st_mtime > 86400:
+        end = int(time.time() * 1000)
+        t, rows = end - days * 86400 * 1000, []
+        while t < end:
+            data = json.load(urllib.request.urlopen(FUNDING.format(s=SYMBOL_MAP[symbol], t=t), timeout=30))
+            if not data:
+                break
+            rows += [[r["fundingTime"] // 1000, float(r["fundingRate"])] for r in data]
+            t = data[-1]["fundingTime"] + 1
+        path.write_text(json.dumps(rows))
+    rows = json.loads(path.read_text())
+    return pd.Series([r[1] for r in rows], index=[r[0] for r in rows], dtype=float)
 
 
 def load_candles(symbol: str, tf: str, days: int) -> pd.DataFrame:
@@ -95,6 +116,12 @@ def run(cfg: dict, k: dict, tf: str, days: int, balance: float,
         else:
             frames[s] = brain.analyze(load_candles(s, tf, days), k, tfs)
     rows = {s: list(frames[s].itertuples(index=False)) for s in pairs}
+    funding = {}  # symbol -> {candle time: summed funding rate paid by longs during that candle}
+    if FUNDING_ON:
+        for s in pairs:
+            f = load_funding(s, days)
+            bucket = (f.index // tfs) * tfs
+            funding[s] = f.groupby(bucket).sum().to_dict()
     idx = {s: {t: i for i, t in enumerate(frames[s]["time"])} for s in pairs}
     times = sorted(set.intersection(*(set(idx[s]) for s in pairs)))
 
@@ -176,6 +203,11 @@ def run(cfg: dict, k: dict, tf: str, days: int, balance: float,
                     trades.append(t)
                     del open_[s]
                 else:
+                    fr = funding.get(s, {}).get(int(ts), 0.0)  # longs pay positive funding, shorts receive it
+                    if fr:
+                        cost = fr * t.left * cv * float(bar.close) * (1 if long else -1)
+                        t.pnl -= cost
+                        balance -= cost
                     t.best = max(t.best, bar.high) if long else min(t.best, bar.low)
                     t.bars += 1
                     if (m.get("stale_candles") and t.bars >= m["stale_candles"]
