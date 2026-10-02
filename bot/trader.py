@@ -27,7 +27,7 @@ from bot.risk import RiskManager, size_position
 log = logging.getLogger("bot")
 
 POLL_S = 30
-CANDLES = 600            # history for indicators + higher-timeframe structure
+CANDLES = 1300           # history for indicators, higher-timeframe structure and daily trend (EMA200 of days)
 CANDLE_DELAY_S = 10      # wait after candle close for the exchange to finalise it
 ENTRY_WAIT_S = 60        # how long a post-only limit entry may rest
 MAX_CHASE_ATR = 0.25     # skip market fallback if price ran this many ATRs past the signal
@@ -302,8 +302,8 @@ class Trader:
         product = self.ex.product(sym)
         open_notional = sum(abs(p.size) * self.ex.product(p.symbol).contract_value * self.price(p.symbol)
                             for p in positions.values())
-        sizing = size_position(balance, st.price, st.stop_loss, product.contract_value,
-                               self.cfg["risk"], open_notional)
+        risk_cfg = dict(self.cfg["risk"], risk_per_trade_pct=self.cfg["risk"]["risk_per_trade_pct"] * st.risk_mult)
+        sizing = size_position(balance, st.price, st.stop_loss, product.contract_value, risk_cfg, open_notional)
         if sizing.contracts < 1:
             self.note("INFO", f"{sym} {st.side} setup skipped: {sizing.note} [{st.reason}]")
             return False

@@ -28,7 +28,8 @@ def test_no_lookahead_in_analysis():
     k = brain.load_knowledge()
     full = brain.analyze(df, k, 3600)
     cut = brain.analyze(df.iloc[:600], k, 3600)
-    cols = ["sh1", "sl1", "trend", "htf_trend", "near_support", "sweep_low", "bull_engulf"]
+    cols = ["sh1", "sl1", "trend", "htf_trend", "near_support", "sweep_low", "bull_engulf",
+            "adx", "er", "chop", "daily_bias", "daily_adx", "recent_move"]
     pd.testing.assert_frame_equal(full[cols].iloc[:600].reset_index(drop=True), cut[cols].reset_index(drop=True))
 
 

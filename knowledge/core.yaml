@@ -1,5 +1,5 @@
 # Machine-readable parameters for knowledge/core.md. Keep both in sync.
-version: 2
+version: 2.1
 
 structure:
   swing_left: 3          # candles before a swing point
@@ -39,6 +39,9 @@ weights:
 
 entry:
   min_score: 5.0
+  against_bias_risk: 0.5   # v2.1: half risk when the trade fights the daily trend (EMA50/200 of daily closes)
+  # tested and rejected (kept as knobs, off): max_chase_atr, require_ltf_trend, min_adx, min_er,
+  # max_chop, min_daily_adx, daily_bias ("with" = better per trade but half the trades)
 
 management:
   sl_buffer_atr: 0.25

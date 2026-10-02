@@ -16,7 +16,7 @@ from pathlib import Path
 import pandas as pd
 import yaml
 
-from bot import candles, levels, psychology, sessions, structure
+from bot import candles, levels, psychology, regime, sessions, structure
 from bot.config import ROOT
 from bot.indicators import add_indicators
 
@@ -24,7 +24,7 @@ KNOWLEDGE_PATH = ROOT / "knowledge" / "core.yaml"
 INDICATOR_PARAMS = {"ema_fast": 20, "ema_mid": 50, "ema_slow": 200, "rsi_len": 14, "atr_len": 14}
 WARMUP = 210
 CTX_COLS = ["trend", "htf_trend", "atr", "sh1", "sl1", "leg_low", "leg_high",
-            "overext_up", "overext_dn", "compression"]
+            "overext_up", "overext_dn", "compression", "adx", "er", "chop", "daily_bias", "daily_adx"]
 
 
 def load_knowledge(path: Path = KNOWLEDGE_PATH) -> dict:
@@ -41,6 +41,7 @@ class Setup:
     atr: float
     score: float
     reasons: tuple[str, ...] = field(default_factory=tuple)
+    risk_mult: float = 1.0  # < 1 when the setup fights the daily trend
 
     @property
     def reason(self) -> str:
@@ -55,6 +56,7 @@ def _features(df: pd.DataFrame, k: dict, tf_seconds: int) -> pd.DataFrame:
     df = candles.annotate(df)
     df = psychology.annotate(df, k["psychology"])
     df = levels.annotate(df)
+    df = regime.annotate(df, tf_seconds)
     df["warm"] = df.index >= WARMUP  # indicators (EMA200 etc.) need history before they mean anything
     return sessions.annotate(df, tf_seconds)
 
@@ -115,6 +117,20 @@ def _score(r, k: dict, d: int, news: float, news_strong: float) -> tuple[float, 
         return score, why, False  # setup-timeframe structure must agree
     if e.get("max_chase_atr") is not None and r.recent_move * d > e["max_chase_atr"]:
         return score, why, False  # price already ran in our direction: chasing
+    # market regime gates (knowledge/core.md section 8)
+    if e.get("min_adx") and not r.ctx_adx >= e["min_adx"]:
+        return score, why, False
+    if e.get("min_er") and not r.ctx_er >= e["min_er"]:
+        return score, why, False
+    if e.get("max_chop") and not r.ctx_chop <= e["max_chop"]:
+        return score, why, False
+    if e.get("min_daily_adx") and not r.ctx_daily_adx >= e["min_daily_adx"]:
+        return score, why, False
+    bias = e.get("daily_bias")  # "with": only trade with the daily trend; "not_against": skip trades against it
+    if bias == "with" and r.ctx_daily_bias != d:
+        return score, why, False
+    if bias == "not_against" and r.ctx_daily_bias == -d:
+        return score, why, False
     if r.mtf and r.trend == d:
         add("entry_trend", "entry-TF structure agrees")
 
@@ -170,10 +186,13 @@ def setup_from_rows(rows: list, i: int, k: dict, news: float = 0.0, news_strong:
         if dist > m["max_stop_atr"] * r.ctx_atr:
             continue
         dist = max(dist, m["min_stop_atr"] * r.atr)
+        against = r.ctx_daily_bias == -d
+        mult = k["entry"].get("against_bias_risk", 1.0) if against else 1.0
         cand = Setup(
             side="buy" if d > 0 else "sell", price=price, stop_loss=price - d * dist,
             tp1=price + d * dist * m["tp1_r"], runner_tp=price + d * dist * m["runner_r"],
-            atr=float(r.atr), score=score, reasons=tuple(why),
+            atr=float(r.atr), score=score, reasons=tuple(why) + (("against daily trend",) if against else ()),
+            risk_mult=mult,
         )
         if best is None or cand.score > best.score:
             best = cand

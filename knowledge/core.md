@@ -1,4 +1,4 @@
-# Core Trading Knowledge (v2)
+# Core Trading Knowledge (v2.1)
 
 The bot's "understanding" of the market. Every concept below has:
 - **Meaning**: what it tells us about the traders behind the price
@@ -76,6 +76,17 @@ Crypto trades 24/7, but traditional markets drive volume.
 Bot detects: the hour of the trigger candle. Inside a London/US open window it got `+session_open` (*disabled in v2, no edge*); on a weekend it gets `weekend` (a penalty).
 
 Not simulated yet: scheduled macro events (CPI, FOMC, jobs data). Planned: an event calendar that blocks new entries ±2h around them.
+
+## 4b. Market regime (bot/regime.py)
+
+| Concept | Meaning | Bot detects |
+|---|---|---|
+| Daily trend (bull / bear market) | The tide of the whole market; fighting it needs luck | Daily EMA50 > EMA200 and close above EMA200 = bull (mirror = bear) |
+| Trend strength (ADX, efficiency ratio, choppiness) | Is price trending or chopping? | Standard formulas on 4h and daily candles |
+
+**Rule (v2.1)**: a setup against the daily trend is still taken, but with **half risk** (`against_bias_risk`).
+Trend-strength filters are *not* used: our entries are pullbacks, and during a pullback the 4h trend
+strength is naturally low, so those filters removed the best entries (see research notes).
 
 ## 5. News
 
@@ -162,6 +173,18 @@ reach +1R, and the edge comes from a few 5-10R winners (average win 2.7R vs aver
 Next ideas need new information, not more slicing of the same data: market regime (trend vs range),
 funding rate / open interest, longer history, live testnet trades.
 
+## Regime research (2026-10-02, BTC+ETH+ADA 4h)
+
+| Filter | In-sample avg R | Out-of-sample avg R | OOS return | OOS max DD |
+|---|---|---|---|---|
+| current v2 | +0.234 | +0.196 | +26.6% | 21.0% |
+| 4h ADX >= 20 / >= 25 | +0.067 / -0.004 | | | |
+| 4h efficiency ratio >= 0.2 | +0.098 | | | |
+| 4h choppiness <= 55 | +0.168 | | | |
+| daily ADX >= 25 | +0.364 | **-0.171** (overfit) | -19.0% | 27.9% |
+| only with daily trend | +0.317 | +0.294 | +21.3% (half the trades) | 23.1% |
+| **half risk against daily trend (adopted)** | +0.243 | +0.196 | **+28.0%** | **18.4%** |
+
 ### Changelog
 - v1 (2026-10-01): initial version.
 - v1.1 (2026-10-01): tp1_fraction 0.30 -> 0.0 (owner-approved trial). 4h backtest: in-sample +0.076R -> +0.140R, out-of-sample +0.115R -> +0.125R per trade.
@@ -170,3 +193,4 @@ funding rate / open interest, longer history, live testnet trades.
   (4h setup + 1h/30m/15m entry: all negative, the tight stops get eaten by fees and noise). Added ADAUSD,
   max positions 3. Result, BTC+ETH+ADA 4h: in-sample +0.234R, out-of-sample +0.196R per trade
   (+26.6% over ~11 months, max drawdown 21%, ~3.8 trades/week).
+- v2.1 (2026-10-02): half risk on setups against the daily trend. Out-of-sample: same trades, drawdown 21% -> 18.4%.

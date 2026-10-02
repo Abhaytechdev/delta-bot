@@ -133,7 +133,8 @@ def run(cfg: dict, k: dict, tf: str, days: int, balance: float,
                     skip("gapped through stop")
                 else:
                     notional = sum(t.left * CONTRACT_VALUE[t.symbol] * t.entry for t in open_.values())
-                    sz = size_position(balance, entry, st.stop_loss, cv, risk, notional)
+                    r_cfg = dict(risk, risk_per_trade_pct=risk["risk_per_trade_pct"] * st.risk_mult)
+                    sz = size_position(balance, entry, st.stop_loss, cv, r_cfg, notional)
                     if sz.contracts < 1:
                         skip("size < 1 contract")
                     else:
