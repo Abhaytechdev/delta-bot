@@ -226,6 +226,18 @@ As trading rules (same trailing management):
 Conclusion: retail positioning is the only crowd signal that held up in both periods, and only as a
 rare short signal. Nothing found yet gives the entries a robust edge over random timing.
 
+## Simplification test (2026-10-02, 6 years with funding)
+
+| Version | Unseen 2020-23 avg R / return / DD | Dev 2023-26 avg R / return / DD |
+|---|---|---|
+| v2.1 long+short (live) | -0.045 / -29.6% / 56% | +0.210 / +142% / 21% |
+| v2.1 long only (`entry.sides: long`) | -0.011 / +1.5% / 43% | +0.237 / +84% / 20% |
+| core concepts only (trend, level, sweep, engulfing) | -0.034 / -30% / 60% | +0.120 / +61% / 26% |
+| core concepts, long only | -0.029 / -3% / 44% | +0.165 / +44% / 25% |
+
+Dropping concepts does not help. Long-only is slightly better per trade and in drawdown in both periods
+but earns less overall and drops the short side of the original goal. Kept as an option (`sides`), not live.
+
 ### Changelog
 - v1 (2026-10-01): initial version.
 - v1.1 (2026-10-01): tp1_fraction 0.30 -> 0.0 (owner-approved trial). 4h backtest: in-sample +0.076R -> +0.140R, out-of-sample +0.115R -> +0.125R per trade.

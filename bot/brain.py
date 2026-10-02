@@ -172,7 +172,8 @@ def setup_from_rows(rows: list, i: int, k: dict, news: float = 0.0, news_strong:
         return None
     m = k["management"]
     best = None
-    for d in (1, -1):
+    sides = (1,) if k["entry"].get("sides") == "long" else (-1,) if k["entry"].get("sides") == "short" else (1, -1)
+    for d in sides:
         score, why, ok = _score(r, k, d, news, news_strong)
         if not ok or score < k["entry"]["min_score"]:
             continue
