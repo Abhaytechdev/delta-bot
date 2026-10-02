@@ -203,6 +203,29 @@ not shown edge over random entries on 6 years of data. Next research must find e
 real edge (e.g. crowd positioning: funding rate / open interest extremes, liquidations), validated on the
 never-seen 2020-2023 period before it is trusted.
 
+## Crowd-positioning research (2026-10-02)
+
+Data: Binance USDT-perp funding (2020-10 on), open interest, top-trader and global (retail) long/short
+ratios, taker buy/sell ratio (BTC from 2020-10, ETH/ADA from 2021-12), via `bot/crowd.py`.
+Method: first test whether a metric predicts the next 7 days' return, the same way in **both** the
+never-seen period and the dev period. Only then turn it into a trading rule.
+
+| Metric | Predicts forward returns in both periods? |
+|---|---|
+| Funding level (3 days) | U-shape in both (extremes -> up moves) but as a trading rule it flipped between periods: no |
+| Open interest change, OI vs price | No (noise) |
+| Top-trader long/short | Weak same-sign contrarian (rho -0.08 / -0.10) |
+| **Global (retail) long/short** | **Yes: contrarian, rho -0.15 / -0.10; most-retail-long quintile -2.0% / -0.5% over 7 days** |
+| Taker buy/sell ratio | No |
+
+As trading rules (same trailing management):
+- Short only when retail is very long (rolling 180-day percentile >= 0.8), random timing: +0.24R unseen / +0.22R dev.
+  Consistent, but only ~9-14 trades per run: **too few to trust yet**.
+- Knowledge v2.1 entries filtered by retail positioning: dev improved (+0.21 -> +0.34R), unseen did not (-0.04 -> -0.05R). Not adopted.
+
+Conclusion: retail positioning is the only crowd signal that held up in both periods, and only as a
+rare short signal. Nothing found yet gives the entries a robust edge over random timing.
+
 ### Changelog
 - v1 (2026-10-01): initial version.
 - v1.1 (2026-10-01): tp1_fraction 0.30 -> 0.0 (owner-approved trial). 4h backtest: in-sample +0.076R -> +0.140R, out-of-sample +0.115R -> +0.125R per trade.
