@@ -9,6 +9,7 @@ Hybrid strategy: news-driven + technical analysis.
 
 ## Hard safety rules (NEVER break these)
 1. DEMO/TESTNET ONLY until I explicitly say "go live". Never use production API URLs or live keys without my approval.
+   **Status: owner said "go live" on 2026-10-02** with ~$117 (INR 10k). Live runs as a separate service (`delta-bot-live`, `config.live.yaml`, `data/live.db`, `bin/live`) next to the testnet bot, guarded in code (exact production URLs + `DELTA_ALLOW_LIVE=yes`). Live risk settings change only with the owner's approval; never raise them on my own.
 2. API keys only in .env (chmod 600). Never print, log, or commit keys. .env must be in .gitignore.
 3. Claude may research and change strategy/risk settings for backtesting and testnet, and must explain every such change in the end-of-task summary. Real-money / production settings change only with my approval.
 4. Every order must have a stop-loss AND a target (take-profit).

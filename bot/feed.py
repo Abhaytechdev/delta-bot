@@ -7,12 +7,14 @@ import time
 
 import websocket
 
+from bot.config import check_endpoint
+
 log = logging.getLogger(__name__)
 
 
 class PriceFeed:
-    def __init__(self, ws_url: str, symbols: list[str]):
-        assert "testnet" in ws_url, "testnet only"
+    def __init__(self, ws_url: str, symbols: list[str], environment: str = "testnet"):
+        check_endpoint(environment, ws_url)
         self.url = ws_url
         self.symbols = symbols
         self.prices: dict[str, tuple[float, float]] = {}  # symbol -> (mark, received_at)

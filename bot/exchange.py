@@ -7,7 +7,7 @@ from decimal import ROUND_DOWN, ROUND_UP, Decimal
 
 from delta_rest_client import DeltaRestClient, OrderType
 
-from bot.config import Secrets
+from bot.config import Secrets, check_endpoint
 
 log = logging.getLogger(__name__)
 
@@ -40,7 +40,7 @@ class Position:
 class Exchange:
     def __init__(self, cfg: dict, secrets: Secrets):
         url = cfg["exchange"]["rest_url"]
-        assert "testnet" in url, "testnet only"
+        check_endpoint(cfg["exchange"]["environment"], url)  # refuses mismatched / unapproved endpoints
         self.client = DeltaRestClient(url, secrets.delta_api_key, secrets.delta_api_secret)
         self._products: dict[str, Product] = {}
 

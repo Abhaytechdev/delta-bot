@@ -30,7 +30,8 @@ def main() -> None:
     start = float(db.get(DAY_START_EQUITY_KEY, bal + upnl))
     state = "HALTED (kill switch)" if db.get(HALT_KEY) == "1" else \
         "PAUSED for today (daily loss limit)" if db.get(DAY_HALT_KEY) == "1" else "trading"
-    print(f"Environment : {cfg['exchange']['environment']}   state: {state}")
+    env = cfg["exchange"]["environment"]
+    print(f"Environment : {'*** LIVE - REAL MONEY ***' if env == 'live' else env}   state: {state}")
     print(f"Balance     : {bal:.2f} USD (available {avail:.2f}), unrealized {upnl:+.2f}")
     print(f"Today       : {bal + upnl - start:+.2f} USD ({(bal + upnl - start) / start * 100 if start else 0:+.2f}%) "
           f"vs day start {start:.2f}")

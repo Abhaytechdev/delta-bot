@@ -51,3 +51,39 @@ def test_env_example_has_no_values():
     for line in (ROOT / ".env.example").read_text().splitlines():
         if line and not line.startswith("#"):
             assert line.endswith("="), f"value present in .env.example: {line.split('=')[0]}"
+
+
+def test_live_needs_exact_production_urls_and_allow_flag(cfg, monkeypatch):
+    live = copy.deepcopy(cfg)
+    live["exchange"].update(environment="live", rest_url="https://api.india.delta.exchange",
+                            ws_url="wss://socket.india.delta.exchange")
+    monkeypatch.delenv("DELTA_ALLOW_LIVE", raising=False)
+    with pytest.raises(ConfigError):
+        _validate(live)  # no allow flag
+    monkeypatch.setenv("DELTA_ALLOW_LIVE", "yes")
+    _validate(live)  # fully approved
+    for bad in ("https://api.delta.exchange", "https://api.india.delta.exchange.evil.com", "https://cdn-ind.testnet.deltaex.org"):
+        broken = copy.deepcopy(live)
+        broken["exchange"]["rest_url"] = bad
+        with pytest.raises(ConfigError):
+            _validate(broken)
+
+
+def test_testnet_config_never_accepts_production_url(cfg, monkeypatch):
+    monkeypatch.setenv("DELTA_ALLOW_LIVE", "yes")
+    bad = copy.deepcopy(cfg)
+    bad["exchange"]["rest_url"] = "https://api.india.delta.exchange"
+    with pytest.raises(ConfigError):
+        _validate(bad)
+
+
+def test_live_config_file_keeps_risk_limits():
+    import os
+    os.environ["DELTA_ALLOW_LIVE"] = "yes"
+    try:
+        live = load_config(ROOT / "config.live.yaml")
+    finally:
+        del os.environ["DELTA_ALLOW_LIVE"]
+    assert live["exchange"]["environment"] == "live" and live["storage"]["db_path"] == "data/live.db"
+    assert live["risk"]["max_leverage"] <= 3 and live["risk"]["risk_per_trade_pct"] <= 1.0
+    assert live["risk"]["require_stop_loss"] and live["risk"]["require_take_profit"]

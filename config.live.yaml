@@ -1,0 +1,36 @@
+# LIVE (real money) configuration. Used only via BOT_CONFIG=config.live.yaml with DELTA_ALLOW_LIVE=yes
+# (set by deploy/delta-bot-live.service). Strategy lives in knowledge/core.yaml, shared with testnet.
+# Risk values here must stay at or below the CLAUDE.md limits; the loader enforces the hard caps.
+
+exchange:
+  environment: live
+  rest_url: https://api.india.delta.exchange
+  ws_url: wss://socket.india.delta.exchange
+
+trading:
+  pairs: [BTCUSD, ETHUSD, ADAUSD]
+  timeframe: 4h
+
+news:
+  strong_threshold: 0.5
+  lookback_hours: 6
+
+risk:
+  max_leverage: 3
+  risk_per_trade_pct: 1.0
+  max_open_positions: 3
+  daily_loss_limit_pct: 3.0
+  require_stop_loss: true
+  require_take_profit: true
+
+storage:
+  db_path: data/live.db
+
+logging:
+  level: INFO
+  file: logs/live.log
+
+report:
+  dir: reports/live
+  timezone: Asia/Kolkata
+  time: "23:55"

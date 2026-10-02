@@ -58,7 +58,7 @@ class Trader:
         self.db = DB(cfg["storage"]["db_path"])
         self.risk = RiskManager(cfg, self.db)
         self.news = NewsMonitor(cfg)  # keyword scoring only: no Claude in live trading
-        self.feed = PriceFeed(cfg["exchange"]["ws_url"], cfg["trading"]["pairs"])
+        self.feed = PriceFeed(cfg["exchange"]["ws_url"], cfg["trading"]["pairs"], cfg["exchange"]["environment"])
         self.k = brain.load_knowledge()
         self.m = self.k["management"]
         self.pairs = cfg["trading"]["pairs"]
@@ -86,7 +86,8 @@ class Trader:
             self.ex.set_leverage(s, self.cfg["risk"]["max_leverage"])
         self.feed.start()
         bal, _ = self.ex.balance_usd()
-        self.note("INFO", f"bot started on {self.cfg['exchange']['environment']}, balance {bal:.2f} USD, "
+        env = self.cfg["exchange"]["environment"]
+        self.note("INFO", f"bot started on {'*** LIVE (REAL MONEY) ***' if env == 'live' else env}, balance {bal:.2f} USD, "
                           f"pairs {self.pairs} {self.tf}, knowledge v{self.k['version']}")
 
     def run(self, once: bool = False) -> None:
@@ -390,7 +391,7 @@ def main() -> None:
     ap.add_argument("--once", action="store_true", help="run a single tick and exit")
     args = ap.parse_args()
     cfg = load_config()
-    lock = open(ROOT / "data" / "trader.lock", "w")
+    lock = open(ROOT / "data" / f"trader-{cfg['exchange']['environment']}.lock", "w")
     try:  # two bots on one account would double every order
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except BlockingIOError:

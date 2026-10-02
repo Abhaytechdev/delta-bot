@@ -1,0 +1,11 @@
+#!/bin/sh
+# Control the LIVE (real money) bot:  bin/live status | stop | stop --close-all | stop --resume | report | logs
+cd /home/trader/delta-bot || exit 1
+export BOT_CONFIG=config.live.yaml DELTA_ALLOW_LIVE=yes
+case "$1" in
+  status) exec ./venv/bin/python -m bot.status ;;
+  stop)   shift; exec ./venv/bin/python -m bot.stop "$@" ;;
+  report) exec ./venv/bin/python -m bot.report ;;
+  logs)   exec tail -f logs/live.log ;;
+  *) echo "usage: bin/live status | stop [--close-all|--resume] | report | logs"; exit 1 ;;
+esac

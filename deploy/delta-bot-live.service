@@ -1,0 +1,17 @@
+[Unit]
+Description=Delta Exchange trading bot (LIVE - real money)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=trader
+WorkingDirectory=/home/trader/delta-bot
+Environment=BOT_CONFIG=config.live.yaml
+Environment=DELTA_ALLOW_LIVE=yes
+ExecStart=/home/trader/delta-bot/venv/bin/python -m bot.trader
+Restart=always
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target
