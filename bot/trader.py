@@ -15,7 +15,7 @@ import sys
 import time
 from datetime import datetime
 
-from bot import brain
+from bot import brain, crowd
 from bot.config import ROOT, load_config, load_secrets
 from bot.db import DB
 from bot.exchange import RESOLUTION_SECONDS, Exchange, Position
@@ -128,6 +128,7 @@ class Trader:
         if now - bar > STALE_SIGNAL_S:  # after a restart, don't act on an old candle
             return
         frames = {s: self.analyze(s) for s in self.pairs}
+        self.record_crowd(frames)
         self.trail(positions, frames)
         if self.risk.halted():
             if not self._halt_logged:
@@ -136,6 +137,21 @@ class Trader:
             return
         self._halt_logged = False
         self.look_for_setups(positions, frames, bal, equity)
+
+    def record_crowd(self, frames: dict) -> None:
+        """Research only (no effect on trading): log retail long/short positioning for later evaluation."""
+        for sym in self.pairs:
+            try:
+                ratio = crowd.live_retail_ratio(sym)
+                pct = crowd.retail_percentile(sym, ratio)
+                price = float(frames[sym]["close"].iloc[-1])
+                self.db.conn.execute("INSERT INTO crowd_obs VALUES(?, ?, ?, ?, ?)", (time.time(), sym, ratio, pct, price))
+                tag = " (retail very long)" if pct is not None and pct >= 0.8 else \
+                      " (retail very short)" if pct is not None and pct <= 0.2 else ""
+                log.info("%s retail long/short %.2f, 180-day percentile %s%s", sym, ratio,
+                         f"{pct:.2f}" if pct is not None else "n/a", tag)
+            except Exception as e:
+                log.warning("%s crowd data unavailable: %s", sym, type(e).__name__)
 
     # ---------- position management ----------
     def open_trade(self, symbol: str):

@@ -69,6 +69,11 @@ def main() -> None:
     cfg = load_config()
     day = args.date or datetime.now(ZoneInfo(cfg["report"]["timezone"])).strftime("%Y-%m-%d")
     body, _ = build(cfg, day)
+    try:
+        from bot.crowd_watch import summary
+        body += "\n\n## Research: retail positioning forward test\n\n" + summary(cfg)
+    except Exception as e:
+        body += f"\n\n(retail forward test unavailable: {type(e).__name__})"
     analysis = llm.ask_text(load_secrets().anthropic_api_key, SYSTEM, body)
     body += "\n\n## Analysis (suggestions only)\n\n" + (analysis or "_Claude analysis skipped: set ANTHROPIC_API_KEY in .env to enable._")
     out = ROOT / cfg["report"]["dir"] / f"{day}.md"

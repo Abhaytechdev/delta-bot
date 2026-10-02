@@ -37,6 +37,9 @@ CREATE TABLE IF NOT EXISTS events (
 CREATE TABLE IF NOT EXISTS equity (
     ts REAL NOT NULL, balance REAL NOT NULL, unrealized REAL NOT NULL
 );
+CREATE TABLE IF NOT EXISTS crowd_obs (
+    ts REAL NOT NULL, symbol TEXT NOT NULL, retail_ls REAL NOT NULL, pct REAL, price REAL NOT NULL
+);
 CREATE TABLE IF NOT EXISTS state (
     key TEXT PRIMARY KEY, value TEXT
 );

@@ -19,6 +19,7 @@ import pandas as pd
 
 from bot.config import ROOT
 
+LIVE_RETAIL = "https://fapi.binance.com/futures/data/globalLongShortAccountRatio?symbol={s}&period=4h&limit=1"
 METRICS = "https://data.binance.vision/data/futures/um/daily/metrics/{s}/{s}-metrics-{d}.zip"
 DIR = ROOT / "data" / "crowd"
 SYMBOL_MAP = {"BTCUSD": "BTCUSDT", "ETHUSD": "ETHUSDT", "ADAUSD": "ADAUSDT", "SOLUSD": "SOLUSDT",
@@ -70,6 +71,23 @@ def metrics(symbol: str, tf_seconds: int) -> pd.DataFrame:
     agg = df.groupby("bucket").agg({"sum_open_interest_value": "last", "sum_toptrader_long_short_ratio": "last",
                                      "count_long_short_ratio": "last", "sum_taker_long_short_vol_ratio": "mean"})
     return agg.rename(columns=cols)
+
+
+def live_retail_ratio(symbol: str) -> float:
+    """Latest Binance global (retail) long/short account ratio for the pair."""
+    import json
+    data = json.load(urllib.request.urlopen(LIVE_RETAIL.format(s=SYMBOL_MAP[symbol]), timeout=15))
+    return float(data[-1]["longShortRatio"])
+
+
+def retail_percentile(symbol: str, value: float, days: int = 180) -> float | None:
+    """Share of the last `days` of cached 4h readings below `value` (needs the data/crowd cache)."""
+    m = metrics(symbol, 14400)
+    if m.empty:
+        return None
+    hist = m["global_ls"].dropna()
+    hist = hist[hist.index >= hist.index.max() - days * 86400]
+    return float((hist < value).mean()) if len(hist) > 100 else None
 
 
 def main() -> None:
