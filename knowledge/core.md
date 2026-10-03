@@ -259,6 +259,32 @@ No variant improved both periods. They raise the win rate (30% -> 34-41%) and he
 unseen period, but cut the dev profit by half or more. Same lesson as the fixed-target test: the system earns
 from the few trades that run far, and any rule that exits early on a pullback cuts those too.
 
+## TP1 (breakeven trigger) and risk-per-trade research (2026-10-03, 6 years, $117 account, funding included)
+
+TP1 = the R level where the stop moves to breakeven and trailing may start (no order, no partial booking).
+
+| Breakeven / trail start | Unseen 2020-23 avg R | Dev 2023-26 avg R / return / DD |
+|---|---|---|
+| 1R / 1R | -0.068 | +0.154 / +48% / 13% |
+| 1.5R / 1.5R | -0.041 | +0.167 / +56% / 20% |
+| **2R / 2R (current)** | -0.050 | **+0.222 / +118% / 22%** |
+| 2R / trail from 3R | -0.012 | +0.196 / +94% / 23% |
+| 2.5R / 2.5R | -0.013 | +0.158 / +86% / 24% |
+| 3R / 3R | -0.004 | +0.076 / +37% / 23% |
+
+No setting beats 2R in both periods (earlier BE comes with a lower profit, later BE with a worse dev period). Kept at 2R.
+
+| Risk per trade | Unseen return / DD | Dev return / DD | Lowest balance (start 117) |
+|---|---|---|---|
+| 0.5% | -15% / 30% | +33% / 8% | $94 |
+| **1% (current)** | -22% / 59% | +118% / 22% | $81 |
+| 1.5% | -35% / 72% | +197% / 33% | $64 |
+| 2% | -43% / 77% | +172% / 41% | $54 |
+| 3% | -62% / 88% | +244% / 54% | $30 |
+
+More risk scales the drawdown faster than the return, and the edge is unproven on unseen data, so risk stays at 1%.
+At $117, 629 setups in 6 years (mostly BTC) were skipped because 1 contract already exceeds the risk budget; at 0.5% it is 1489.
+
 ### Changelog
 - v1 (2026-10-01): initial version.
 - v1.1 (2026-10-01): tp1_fraction 0.30 -> 0.0 (owner-approved trial). 4h backtest: in-sample +0.076R -> +0.140R, out-of-sample +0.115R -> +0.125R per trade.
