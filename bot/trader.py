@@ -270,15 +270,21 @@ class Trader:
                 d = 2 * atr
                 sl = pos.entry_price - d if long else pos.entry_price + d
                 tp = pos.entry_price + d * self.m["runner_r"] * (1 if long else -1)
-            try:
-                for o in orders:
-                    if o.get("stop_order_type") in ("stop_loss_order", "take_profit_order"):
-                        self.ex.cancel_order(sym, o["id"])
-                self.ex.place_position_bracket(sym, sl, tp, long)
-                self.note("WARN", f"{sym}: SL/TP did not cover position x{pos.size}; re-attached SL {sl:.2f} TP {tp:.2f}")
-            except Exception as e:
-                self.note("ERROR", f"{sym}: could not attach SL/TP ({e}); closing position")
-                self.close(pos, "no_stop_loss")
+            if self.attach_bracket(sym, pos, sl, tp, orders):
+                self.note("WARN", f"{sym}: SL/TP did not cover position x{pos.size}; re-attached SL {sl:.4f} TP {tp:.4f}")
+
+    def attach_bracket(self, sym: str, pos: Position, sl: float, tp: float, orders: list | None = None) -> bool:
+        """Replace any SL/TP orders with one bracket covering the whole position. Closes it if that fails."""
+        try:
+            for o in (orders if orders is not None else self.ex.open_orders(sym)):
+                if o.get("stop_order_type") in ("stop_loss_order", "take_profit_order"):
+                    self.ex.cancel_order(sym, o["id"])
+            self.ex.place_position_bracket(sym, sl, tp, pos.size > 0)
+            return True
+        except Exception as e:
+            self.note("ERROR", f"{sym}: could not attach SL/TP ({e}); closing position")
+            self.close(pos, "no_stop_loss")
+            return False
 
     def expire(self, positions: dict[str, Position]) -> None:
         for t in self.db.open_trades():
@@ -326,15 +332,35 @@ class Trader:
             return False
         long = st.side == "buy"
         opened_at = time.time()
-        if not self._limit_entry(sym, st, sizing.contracts):
-            px = self.price(sym)
-            ran = (px - st.price) * (1 if long else -1)
-            beyond = (px <= st.stop_loss or px >= st.tp1) if long else (px >= st.stop_loss or px <= st.tp1)
-            if ran > MAX_CHASE_ATR * st.atr or beyond:
-                self.note("INFO", f"{sym} {st.side}: price moved to {px:.2f}, not chasing")
+        limit_filled = self._limit_entry(sym, st, sizing.contracts)
+        px = self.price(sym)
+        ran = (px - st.price) * (1 if long else -1)
+        beyond = (px <= st.stop_loss or px >= st.tp1) if long else (px >= st.stop_loss or px <= st.tp1)
+        too_far = ran > MAX_CHASE_ATR * st.atr or beyond  # never chase a setup that already ran away
+        if not limit_filled:
+            if too_far:
+                self.note("INFO", f"{sym} {st.side}: price moved to {px:.4f}, not chasing")
                 return False
             self.ex.place_entry(sym, st.side, sizing.contracts, st.stop_loss, st.runner_tp)
             time.sleep(2)
+        else:
+            # Thin books fill a post-only order only partly. Top up the rest at market (same SL/TP),
+            # keeping total risk within the planned budget, so the trade is not left at a fraction of its size.
+            cur = next((p for p in self.ex.positions() if p.symbol == sym), None)
+            have = abs(cur.size) if cur else 0
+            if cur and have < sizing.contracts:
+                per_c = abs(px - st.stop_loss) * product.contract_value
+                spent = have * abs(cur.entry_price - st.stop_loss) * product.contract_value
+                rem = min(sizing.contracts - have, int((sizing.risk_usd - spent) // per_c) if per_c > 0 else 0)
+                if rem >= 1 and not too_far:
+                    self.ex.place_market(sym, st.side, rem)  # no bracket allowed on an existing position
+                    time.sleep(1)
+                    cur = next((p for p in self.ex.positions() if p.symbol == sym), cur)
+                    self.attach_bracket(sym, cur, st.stop_loss, st.runner_tp)  # one SL/TP over the whole position
+                    self.note("INFO", f"{sym}: limit order filled {have}/{sizing.contracts}; topped up {rem} at market")
+                else:
+                    self.note("WARN", f"{sym}: only {have}/{sizing.contracts} contracts filled and no top-up "
+                                      f"({'price moved' if too_far else 'risk budget'}); keeping the partial position")
         pos = next((p for p in self.ex.positions() if p.symbol == sym), None)
         if not pos:
             self.note("WARN", f"{sym} {st.side}: entry not filled")
@@ -355,9 +381,9 @@ class Trader:
         positions[sym] = pos
         if tp1_size:
             self.ex.place_reduce_limit(sym, "sell" if long else "buy", tp1_size, tp1)
-        self.note("INFO", f"OPENED {sym} {st.side} x{size} @ {pos.entry_price} SL {st.stop_loss:.2f} "
-                          f"TP1 {tp1:.2f} ({tp1_size} contracts) runner {st.runner_tp:.2f} "
-                          f"risk ${sizing.risk_usd:.2f} [{st.reason}]")
+        self.note("INFO", f"OPENED {sym} {st.side} x{size}/{sizing.contracts} planned @ {pos.entry_price} "
+                          f"SL {st.stop_loss:.4f} TP1 {tp1:.4f} ({tp1_size} contracts) runner {st.runner_tp:.4f} "
+                          f"risk ${dist * size * product.contract_value:.2f} of ${sizing.risk_usd:.2f} planned [{st.reason}]")
         self.protect({sym: pos})
         return True
 

@@ -129,6 +129,11 @@ class Exchange:
             order["client_order_id"] = client_order_id
         return self.client.create_order(order)
 
+    def place_market(self, symbol: str, side: str, size: int) -> dict:
+        """Plain market order (no bracket). Used to top up an open position, which the exchange refuses
+        to accept together with bracket parameters (bracket_order_position_exists)."""
+        return self.client.place_order(self.product(symbol).id, size, side, order_type=OrderType.MARKET)
+
     def place_position_bracket(self, symbol: str, stop_loss: float, take_profit: float, long: bool) -> dict:
         """Attach SL/TP to an existing position (covers the whole position)."""
         p = self.product(symbol)
