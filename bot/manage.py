@@ -76,3 +76,15 @@ def reversal_exit(t_side: str, entry: float, sl0: float, best: float, rows: list
     if x and best_r >= 1.5 and cur_r < best_r * (1 - x):
         return "giveback"
     return None
+
+
+def classify_exit(side: str, exit_price: float, stop: float, target: float, tp1_done: bool, tol_pct: float = 0.003) -> str:
+    """Why a position ended, judged from where it exited. Anything not at the stop or target is 'manual_or_other'
+    (e.g. closed by hand on the exchange website)."""
+    long = side == "buy"
+    tol = exit_price * tol_pct
+    if (exit_price >= target - tol) if long else (exit_price <= target + tol):
+        return "runner_target"
+    if (exit_price <= stop + tol) if long else (exit_price >= stop - tol):
+        return "breakeven/trail" if tp1_done else "stop_loss"
+    return "manual_or_other"

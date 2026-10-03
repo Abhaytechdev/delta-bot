@@ -8,6 +8,7 @@ After each new candle closes: trail stops behind new swings, then look for setup
 
 import argparse
 import fcntl
+import requests
 import logging
 import logging.handlers
 import signal
@@ -15,7 +16,7 @@ import sys
 import time
 from datetime import datetime
 
-from bot import brain, crowd
+from bot import brain, crowd, manage
 from bot.config import ROOT, load_config, load_secrets
 from bot.db import DB
 from bot.exchange import RESOLUTION_SECONDS, Exchange, Position
@@ -27,7 +28,7 @@ from bot.risk import RiskManager, size_position
 log = logging.getLogger("bot")
 
 POLL_S = 10
-CANDLES = 1300           # history for indicators, higher-timeframe structure and daily trend (EMA200 of days)
+CANDLES = 2400           # ~400 days of 4h: indicators, higher-timeframe structure and a converged daily EMA200
 CANDLE_DELAY_S = 10      # wait after candle close for the exchange to finalise it
 ENTRY_WAIT_S = 60        # how long a post-only limit entry may rest
 MAX_CHASE_ATR = 0.25     # skip market fallback if price ran this many ATRs past the signal
@@ -124,11 +125,13 @@ class Trader:
         bar = int(now - CANDLE_DELAY_S) // self.tf_s * self.tf_s  # start of the current candle
         if bar <= self._last_bar:
             return
+        if now - bar > STALE_SIGNAL_S:  # after a restart, don't act on an old candle
+            self._last_bar = bar
+            self.db.set("last_bar", bar)
+            return
+        frames = {s: self.analyze(s) for s in self.pairs}  # may raise on an API hiccup: retried on the next tick
         self._last_bar = bar
         self.db.set("last_bar", bar)
-        if now - bar > STALE_SIGNAL_S:  # after a restart, don't act on an old candle
-            return
-        frames = {s: self.analyze(s) for s in self.pairs}
         self.record_crowd(frames)
         self.trail(positions, frames)
         if self.risk.halted():
@@ -171,11 +174,8 @@ class Trader:
             pnl, fees, exit_price = self.realized(t)
             reason = t["exit_reason"]
             if not reason and exit_price is not None:
-                long = t["side"] == "buy"
-                if (exit_price >= t["take_profit"]) if long else (exit_price <= t["take_profit"]):
-                    reason = "runner_target"
-                else:
-                    reason = "breakeven/trail" if t["tp1_done"] else "stop_loss"
+                reason = manage.classify_exit(t["side"], exit_price, t["sl_current"] or t["stop_loss"],
+                                              t["take_profit"], bool(t["tp1_done"]))
             r = pnl / t["risk_usd"] if t["risk_usd"] else 0
             self.db.update_trade(t["id"], status="closed", closed_at=time.time(), exit_price=exit_price,
                                  exit_reason=reason or "unknown", pnl=pnl, fees=fees)
@@ -255,6 +255,12 @@ class Trader:
     def protect(self, positions: dict[str, Position]) -> None:
         """Every open position must have a stop-loss and target covering its full size; else add or close."""
         for sym, pos in positions.items():
+            orders = self.ex.open_orders(sym)
+            sl_size = sum(int(o["size"]) for o in orders if o.get("stop_order_type") == "stop_loss_order")
+            tp_size = sum(int(o["size"]) for o in orders if o.get("stop_order_type") == "take_profit_order")
+            if sl_size >= abs(pos.size) and tp_size >= abs(pos.size):
+                continue
+            time.sleep(3)  # the exchange can lag right after a fill or an edit: look again before acting
             orders = self.ex.open_orders(sym)
             sl_size = sum(int(o["size"]) for o in orders if o.get("stop_order_type") == "stop_loss_order")
             tp_size = sum(int(o["size"]) for o in orders if o.get("stop_order_type") == "take_profit_order")
@@ -341,8 +347,11 @@ class Trader:
             if too_far:
                 self.note("INFO", f"{sym} {st.side}: price moved to {px:.4f}, not chasing")
                 return False
-            self.ex.place_entry(sym, st.side, sizing.contracts, st.stop_loss, st.runner_tp)
-            time.sleep(2)
+            try:
+                self.ex.place_entry(sym, st.side, sizing.contracts, st.stop_loss, st.runner_tp)
+            except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as e:
+                self.note("WARN", f"{sym}: market entry timed out ({type(e).__name__}); checking the exchange")
+            time.sleep(3)
         else:
             # Thin books fill a post-only order only partly. Top up the rest at market (same SL/TP),
             # keeping total risk within the planned budget, so the trade is not left at a fraction of its size.
@@ -353,8 +362,11 @@ class Trader:
                 spent = have * abs(cur.entry_price - st.stop_loss) * product.contract_value
                 rem = min(sizing.contracts - have, int((sizing.risk_usd - spent) // per_c) if per_c > 0 else 0)
                 if rem >= 1 and not too_far:
-                    self.ex.place_market(sym, st.side, rem)  # no bracket allowed on an existing position
-                    time.sleep(1)
+                    try:
+                        self.ex.place_market(sym, st.side, rem)  # no bracket allowed on an existing position
+                    except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as e:
+                        self.note("WARN", f"{sym}: top-up timed out ({type(e).__name__}); checking the exchange")
+                    time.sleep(2)
                     cur = next((p for p in self.ex.positions() if p.symbol == sym), cur)
                     self.attach_bracket(sym, cur, st.stop_loss, st.runner_tp)  # one SL/TP over the whole position
                     self.note("INFO", f"{sym}: limit order filled {have}/{sizing.contracts}; topped up {rem} at market")
@@ -393,7 +405,17 @@ class Trader:
         try:
             o = self.ex.place_entry(sym, st.side, size, st.stop_loss, st.runner_tp,
                                     limit_price=bid if st.side == "buy" else ask)
-        except Exception as e:
+        except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as e:
+            # Outcome unknown: the order may exist. Check before doing anything else (never double-enter).
+            self.note("WARN", f"{sym}: limit entry timed out ({type(e).__name__}); checking the exchange")
+            time.sleep(3)
+            if any(p.symbol == sym for p in self.ex.positions()):
+                return True
+            resting = [x for x in self.ex.open_orders(sym) if not x.get("stop_order_type") and not x.get("reduce_only")]
+            if not resting:
+                return False
+            o = resting[-1]
+        except Exception as e:  # explicit rejection (e.g. post-only would cross): the order does not exist
             log.info("%s post-only entry rejected (%s); will use market", sym, e)
             return False
         deadline = time.time() + ENTRY_WAIT_S

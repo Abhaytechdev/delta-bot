@@ -9,7 +9,7 @@ import pandas as pd
 
 
 def annotate(df: pd.DataFrame, left: int, right: int, zone_memory: int) -> pd.DataFrame:
-    h, l, c = df["high"].to_numpy(), df["low"].to_numpy(), df["close"].to_numpy()
+    h, l = df["high"].to_numpy(), df["low"].to_numpy()
     n = len(df)
     highs: list[float] = []  # confirmed swing high prices, oldest first
     lows: list[float] = []

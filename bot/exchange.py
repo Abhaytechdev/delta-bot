@@ -5,6 +5,7 @@ import time
 from dataclasses import dataclass
 from decimal import ROUND_DOWN, ROUND_UP, Decimal
 
+import requests
 from delta_rest_client import DeltaRestClient, OrderType
 
 from bot.config import Secrets, check_endpoint
@@ -12,6 +13,31 @@ from bot.config import Secrets, check_endpoint
 log = logging.getLogger(__name__)
 
 RESOLUTION_SECONDS = {"1m": 60, "3m": 180, "5m": 300, "15m": 900, "30m": 1800, "1h": 3600, "2h": 7200, "4h": 14400, "6h": 21600, "1d": 86400}
+
+
+class RetryingClient(DeltaRestClient):
+    """Retries transient failures. Reads (GET) are retried on timeouts / 5xx / 429; any request is retried when
+    the server rejected it as `expired_signature` (it was not executed). Orders are never retried after a timeout
+    (the outcome is unknown); callers must check the exchange state instead."""
+
+    def request(self, method, path, *args, **kwargs):
+        last = None
+        for attempt in range(3):
+            try:
+                return super().request(method, path, *args, **kwargs)
+            except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as e:
+                if method != "GET":
+                    raise
+                last = e
+            except requests.HTTPError as e:
+                resp = e.response
+                code = resp.status_code if resp is not None else 0
+                expired = code == 401 and resp is not None and "expired_signature" in resp.text
+                if not (expired or (method == "GET" and code in (429, 502, 503, 504))):
+                    raise
+                last = e
+            time.sleep(1 + attempt)
+        raise last
 
 
 @dataclass(frozen=True)
@@ -41,7 +67,7 @@ class Exchange:
     def __init__(self, cfg: dict, secrets: Secrets):
         url = cfg["exchange"]["rest_url"]
         check_endpoint(cfg["exchange"]["environment"], url)  # refuses mismatched / unapproved endpoints
-        self.client = DeltaRestClient(url, secrets.delta_api_key, secrets.delta_api_secret)
+        self.client = RetryingClient(url, secrets.delta_api_key, secrets.delta_api_secret)
         self._products: dict[str, Product] = {}
 
     # ---------- market data ----------
