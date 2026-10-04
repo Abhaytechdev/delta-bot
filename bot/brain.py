@@ -162,7 +162,7 @@ def _score(r, k: dict, d: int, news: float, news_strong: float) -> tuple[float, 
         add("overextended", "overextended (FOMO risk)")
     if abs(news) >= news_strong:
         add("news_aligned" if news * d > 0 else "news_against", f"news {news:+.2f}")
-    return score, why, triggers > 0
+    return score, why, triggers >= k["entry"].get("min_triggers", 1)
 
 
 def setup_from_rows(rows: list, i: int, k: dict, news: float = 0.0, news_strong: float = 0.5) -> Setup | None:

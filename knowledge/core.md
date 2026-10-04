@@ -1,4 +1,4 @@
-# Core Trading Knowledge (v2.1)
+# Core Trading Knowledge (v2.2)
 
 The bot's "understanding" of the market. Every concept below has:
 - **Meaning**: what it tells us about the traders behind the price
@@ -104,7 +104,7 @@ News is a helper, not the strategy. Strong news **in** the trade direction adds 
 
 The setup score is the sum of the weights of every concept present. Required for a long:
 - Trend context: higher-timeframe uptrend, or a lower-timeframe uptrend with a higher-timeframe range
-- At least one trigger with a non-zero weight: sweep, engulfing, strong candle, or break of structure
+- At least **two** triggers (`entry.min_triggers`, v2.2) with a non-zero weight: sweep, engulfing, strong candle, or break of structure
 - Score ≥ `min_score`
 
 Shorts mirror all of the above.
@@ -285,6 +285,24 @@ No setting beats 2R in both periods (earlier BE comes with a lower profit, later
 More risk scales the drawdown faster than the return, and the edge is unproven on unseen data, so risk stays at 1%.
 At $117, 629 setups in 6 years (mostly BTC) were skipped because 1 contract already exceeds the risk budget; at 0.5% it is 1489.
 
+## Setup-quality research (2026-10-04, 6 years, $117 account, funding included)
+
+Trigger: the first live setup scored exactly the minimum (5.0) on a single trigger. Pre-set fixes tested on unseen and dev data:
+
+| Rule | Unseen 2020-23 avg R / DD | Dev 2023-26 avg R / DD |
+|---|---|---|
+| baseline (1 trigger) | -0.047 / 59% | +0.222 / 22% |
+| min score 5.5 | -0.117 / 65% | +0.116 / 21% |
+| min score 6.0 | -0.001 / 48% | +0.120 / 27% |
+| 4h structure must agree | -0.016 / 33% | +0.234 / 23% |
+| weekend penalty -2 / no weekend trades | -0.023 / -0.011 | +0.205 / +0.219 |
+| **at least 2 triggers (adopted)** | **+0.111 / 34%** | **+0.322 / 12%** |
+| at least 3 triggers | +1.080 / 8% (36 trades) | +0.396 / 10% (47 trades) |
+
+Higher score thresholds do not help; trigger confluence does, in both periods, and the effect grows with the number
+of triggers. Cost: about 60% fewer trades (about 1.3 per week across BTC/ETH/ADA). 2022 (bear year) is still negative
+(-0.33). 3 triggers looks even better but has too few trades to rely on; revisit with more live data.
+
 ### Changelog
 - v1 (2026-10-01): initial version.
 - v1.1 (2026-10-01): tp1_fraction 0.30 -> 0.0 (owner-approved trial). 4h backtest: in-sample +0.076R -> +0.140R, out-of-sample +0.115R -> +0.125R per trade.
@@ -294,3 +312,4 @@ At $117, 629 setups in 6 years (mostly BTC) were skipped because 1 contract alre
   max positions 3. Result, BTC+ETH+ADA 4h: in-sample +0.234R, out-of-sample +0.196R per trade
   (+26.6% over ~11 months, max drawdown 21%, ~3.8 trades/week).
 - v2.1 (2026-10-02): half risk on setups against the daily trend. Out-of-sample: same trades, drawdown 21% -> 18.4%.
+- v2.2 (2026-10-04): at least 2 triggers required. Unseen avg R -0.047 -> +0.111, dev +0.222 -> +0.322, drawdown roughly halved, ~60% fewer trades.
