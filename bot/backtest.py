@@ -25,7 +25,8 @@ from datetime import datetime, timezone
 
 import pandas as pd
 
-from bot import brain, manage
+from bot import brain, manage, structure
+from bot.indicators import add_indicators
 from bot.config import ROOT, load_config
 from bot.exchange import RESOLUTION_SECONDS
 from bot.risk import ist_day, size_position
@@ -103,8 +104,9 @@ class Trade:
 
 
 def run(cfg: dict, k: dict, tf: str, days: int, balance: float,
-        setup_tf: str | None = None) -> tuple[list[Trade], list[tuple[int, float]], dict]:
-    """tf = entry timeframe; setup_tf (optional) = timeframe for trend/zones context."""
+        setup_tf: str | None = None, mgmt_tf: str | None = None) -> tuple[list[Trade], list[tuple[int, float]], dict]:
+    """tf = entry timeframe; setup_tf (optional) = timeframe for trend/zones context;
+    mgmt_tf (optional, e.g. "1h"/"15m") = open trades are managed (stop, breakeven, swing trail) on these smaller candles."""
     pairs, risk = cfg["trading"]["pairs"], cfg["risk"]
     m = k["management"]
     tfs = RESOLUTION_SECONDS[tf]
@@ -116,6 +118,16 @@ def run(cfg: dict, k: dict, tf: str, days: int, balance: float,
         else:
             frames[s] = brain.analyze(load_candles(s, tf, days), k, tfs)
     rows = {s: list(frames[s].itertuples(index=False)) for s in pairs}
+    sub_rows: dict[str, dict[int, list]] = {}
+    if mgmt_tf:
+        sk_ = k["structure"]
+        for s_ in pairs:
+            d_ = add_indicators(load_candles(s_, mgmt_tf, days), brain.INDICATOR_PARAMS)
+            d_ = structure.annotate(d_, sk_["swing_left"], sk_["swing_right"], sk_["zone_memory"])
+            g_: dict[int, list] = {}
+            for r_ in d_.itertuples(index=False):
+                g_.setdefault(int(r_.time) // tfs * tfs, []).append(r_)
+            sub_rows[s_] = g_
     funding = {}  # symbol -> {candle time: summed funding rate paid by longs during that candle}
     if FUNDING_ON:
         for s in pairs:
@@ -177,27 +189,49 @@ def run(cfg: dict, k: dict, tf: str, days: int, balance: float,
             t = open_.get(s)
             if t:
                 long = t.side == "buy"
-                hit = (lambda px: bar.low <= px) if long else (lambda px: bar.high >= px)
-                reach = (lambda px: bar.high >= px) if long else (lambda px: bar.low <= px)
-                if hit(t.sl):
-                    gapped = (bar.open < t.sl) if long else (bar.open > t.sl)
-                    px = (bar.open if gapped else t.sl) * ((1 - STOP_SLIPPAGE) if long else (1 + STOP_SLIPPAGE))
-                    fill(t, t.left, px, cv)
-                    t.exit_reason = "breakeven/trail" if t.tp1_done else "stop_loss"
-                else:
-                    for n, (r_lvl, frac) in enumerate(m.get("partials") or []):
-                        px = manage.level(t.side, t.entry, t.sl0, r_lvl)
-                        if n not in t.partials_done and reach(px):
-                            t.partials_done.add(n)
-                            part = int(round(t.size * frac))
-                            if 0 < part < t.left:
-                                fill(t, part, px, cv)
-                    if reach(t.runner):
-                        fill(t, t.left, t.runner, cv)
-                        t.exit_reason = "target"
-                    elif ts + tfs - t.opened >= m["max_hold_days"] * 86400:
+                subs = sub_rows[s].get(int(ts)) if mgmt_tf else None
+                if subs:
+                    for b in subs:  # smaller candles inside this entry candle: stop first, then target, then trail
+                        if (b.low <= t.sl) if long else (b.high >= t.sl):
+                            gapped = (b.open < t.sl) if long else (b.open > t.sl)
+                            px = (b.open if gapped else t.sl) * ((1 - STOP_SLIPPAGE) if long else (1 + STOP_SLIPPAGE))
+                            fill(t, t.left, px, cv)
+                            t.exit_reason = "breakeven/trail" if t.tp1_done else "stop_loss"
+                            break
+                        if (b.high >= t.runner) if long else (b.low <= t.runner):
+                            fill(t, t.left, t.runner, cv)
+                            t.exit_reason = "target"
+                            break
+                        t.best = max(t.best, b.high) if long else min(t.best, b.low)
+                        new_sl = manage.new_stop(t.side, t.entry, t.sl0, t.sl, t.best, b, m, k, None)
+                        if new_sl != t.sl:
+                            t.sl = new_sl
+                            t.tp1_done = (new_sl - t.entry) * (1 if long else -1) >= 0
+                    if t.left and ts + tfs - t.opened >= m["max_hold_days"] * 86400:
                         fill(t, t.left, float(bar.close), cv)
                         t.exit_reason = "max_hold"
+                else:
+                    hit = (lambda px: bar.low <= px) if long else (lambda px: bar.high >= px)
+                    reach = (lambda px: bar.high >= px) if long else (lambda px: bar.low <= px)
+                    if hit(t.sl):
+                        gapped = (bar.open < t.sl) if long else (bar.open > t.sl)
+                        px = (bar.open if gapped else t.sl) * ((1 - STOP_SLIPPAGE) if long else (1 + STOP_SLIPPAGE))
+                        fill(t, t.left, px, cv)
+                        t.exit_reason = "breakeven/trail" if t.tp1_done else "stop_loss"
+                    else:
+                        for n, (r_lvl, frac) in enumerate(m.get("partials") or []):
+                            px = manage.level(t.side, t.entry, t.sl0, r_lvl)
+                            if n not in t.partials_done and reach(px):
+                                t.partials_done.add(n)
+                                part = int(round(t.size * frac))
+                                if 0 < part < t.left:
+                                    fill(t, part, px, cv)
+                        if reach(t.runner):
+                            fill(t, t.left, t.runner, cv)
+                            t.exit_reason = "target"
+                        elif ts + tfs - t.opened >= m["max_hold_days"] * 86400:
+                            fill(t, t.left, float(bar.close), cv)
+                            t.exit_reason = "max_hold"
                 if t.left == 0:
                     t.closed = int(ts)
                     trades.append(t)
@@ -232,11 +266,12 @@ def run(cfg: dict, k: dict, tf: str, days: int, balance: float,
                             trades.append(t)
                             del open_[s]
                             continue
-                    new_sl = manage.new_stop(t.side, t.entry, t.sl0, t.sl, t.best, bar, m, k,
-                                             rows[s][max(0, idx[s][ts] - 7):idx[s][ts] + 1])  # next candle
-                    if new_sl != t.sl:
-                        t.sl = new_sl
-                        t.tp1_done = (new_sl - t.entry) * (1 if long else -1) >= 0
+                    if not subs:
+                        new_sl = manage.new_stop(t.side, t.entry, t.sl0, t.sl, t.best, bar, m, k,
+                                                 rows[s][max(0, idx[s][ts] - 7):idx[s][ts] + 1])  # next candle
+                        if new_sl != t.sl:
+                            t.sl = new_sl
+                            t.tp1_done = (new_sl - t.entry) * (1 if long else -1) >= 0
         # 3) equity and daily loss limit
         unreal = 0.0
         for t in open_.values():
@@ -294,6 +329,7 @@ def line(label: str, s: dict) -> str:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
+    ap.add_argument("--mgmt-tf", help="manage open trades on smaller candles, e.g. 1h or 15m")
     ap.add_argument("--tf", nargs="+", default=["30m", "1h", "2h", "4h"], help="entry timeframe(s)")
     ap.add_argument("--pairs", nargs="+", help="override pairs, e.g. BTCUSD SOLUSD")
     ap.add_argument("--setup-tf", help="context timeframe for trend/zones, e.g. 4h")
@@ -307,7 +343,7 @@ def main() -> None:
     if args.pairs:
         cfg["trading"]["pairs"] = args.pairs
     for tf in args.tf:
-        trades, equity, skipped = run(cfg, k, tf, args.days, args.balance, args.setup_tf)
+        trades, equity, skipped = run(cfg, k, tf, args.days, args.balance, args.setup_tf, args.mgmt_tf)
         t0, t1 = equity[0][0], equity[-1][0] + 1
         cut = int(t0 + (t1 - t0) * (1 - args.oos))
         print(f"{args.setup_tf + ' setup / ' if args.setup_tf else ''}{tf} entry:")

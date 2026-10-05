@@ -326,6 +326,25 @@ No faster trail beat the baseline in both periods on v2.2. On v2.1 the candle-lo
 Same lesson as before: the profit comes from the few trades that run far, and any tighter trail cuts them.
 Decision: keep the swing-low trail. The giveback in a straight run (profit locked only at breakeven) is the price.
 
+## Trailing on smaller candles (2026-10-05, 6 years, $117 account, funding included)
+
+Question: the 4h check is slow; what if open trades are managed (stop, breakeven, swing-low trail) on 1h or 15m
+candles? Entries stay on 4h. Backtest option `mgmt_tf` (`python -m bot.backtest --mgmt-tf 1h`). Note: the stop itself
+is always live on the exchange; the timeframe only decides how fast the stop is *moved up*.
+
+| Trailing timeframe (v2.2, live) | Unseen 2020-23 avg R | Dev 2023-26 avg R | Dev win rate / avg win |
+|---|---|---|---|
+| **4h swing trail (baseline)** | **+0.111** | **+0.322** | 32% / 3.12R |
+| 1h swing trail from 2R | -0.078 | +0.206 | 37% / 2.34R |
+| 1h swing trail from 3R | +0.012 | +0.172 | 26% / 3.22R |
+| 1h, buffer 0.5 ATR | -0.026 | +0.149 | 35% / 2.29R |
+| 15m swing trail | -0.246 | +0.095 | 36% / 2.09R |
+| 15m, buffer 1.0 ATR | -0.156 | +0.065 | 36% / 2.01R |
+
+Same on v2.1 (1 trigger): 1h unseen -0.032 vs -0.047 but dev +0.148 vs +0.222; 15m worse in both.
+Smaller candles raise the win rate (they lock gains sooner) but cut the average win (3.1R -> 2.0-2.3R): the
+trail is shaken out by normal pullbacks. Decision: keep trailing on 4h swing lows.
+
 ### Changelog
 - v1 (2026-10-01): initial version.
 - v1.1 (2026-10-01): tp1_fraction 0.30 -> 0.0 (owner-approved trial). 4h backtest: in-sample +0.076R -> +0.140R, out-of-sample +0.115R -> +0.125R per trade.
