@@ -303,6 +303,29 @@ Higher score thresholds do not help; trigger confluence does, in both periods, a
 of triggers. Cost: about 60% fewer trades (about 1.3 per week across BTC/ETH/ADA). 2022 (bear year) is still negative
 (-0.33). 3 triggers looks even better but has too few trades to rely on; revisit with more live data.
 
+## Faster-trailing research (2026-10-05, 6 years, $117 account, funding included)
+
+Trigger: the live ADA trade ran to +3.8R with the stop still at breakeven (no 4h swing low forms in a straight
+run). Options added to `bot/manage.py` (off by default): `trail_bars`, `fast_trail_start_r`, `chandelier_atr`,
+`chandelier_start_r`. Tested on the live strategy (v2.2) and on v2.1 (1 trigger) as a second view.
+
+| Trailing rule (v2.2, live) | Unseen 2020-23 avg R / DD | Dev 2023-26 avg R / DD |
+|---|---|---|
+| **baseline: swing-low trail from 2R** | **+0.111 / 34%** | **+0.322 / 12%** |
+| 4-candle low from 2R | +0.068 / 32% | +0.167 / 15% |
+| 3-candle low from 2R | +0.069 / 30% | +0.141 / 16% |
+| 2-candle low from 2R | -0.142 / 34% | +0.127 / 14% |
+| 3-candle low from 3R | -0.001 / 36% | +0.202 / 14% |
+| chandelier 3 ATR from 3R | -0.147 / 37% | +0.231 / 16% |
+| chandelier 4 ATR from 3R | +0.062 / 34% | +0.309 / 15% |
+| lock +1R@3R, +2.5R@4.5R, +4R@6R | +0.001 / 36% | +0.276 / 12% |
+| book 50% at 3R | +0.024 / 33% | +0.149 / 15% |
+
+No faster trail beat the baseline in both periods on v2.2. On v2.1 the candle-low trails improved the unseen period
+(-0.047 -> +0.006) but cut the dev period (+0.222 -> +0.130). Higher win rate (33-37% vs 32%), lower total profit.
+Same lesson as before: the profit comes from the few trades that run far, and any tighter trail cuts them.
+Decision: keep the swing-low trail. The giveback in a straight run (profit locked only at breakeven) is the price.
+
 ### Changelog
 - v1 (2026-10-01): initial version.
 - v1.1 (2026-10-01): tp1_fraction 0.30 -> 0.0 (owner-approved trial). 4h backtest: in-sample +0.076R -> +0.140R, out-of-sample +0.115R -> +0.125R per trade.

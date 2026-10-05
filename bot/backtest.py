@@ -232,7 +232,8 @@ def run(cfg: dict, k: dict, tf: str, days: int, balance: float,
                             trades.append(t)
                             del open_[s]
                             continue
-                    new_sl = manage.new_stop(t.side, t.entry, t.sl0, t.sl, t.best, bar, m, k)  # next candle
+                    new_sl = manage.new_stop(t.side, t.entry, t.sl0, t.sl, t.best, bar, m, k,
+                                             rows[s][max(0, idx[s][ts] - 7):idx[s][ts] + 1])  # next candle
                     if new_sl != t.sl:
                         t.sl = new_sl
                         t.tp1_done = (new_sl - t.entry) * (1 if long else -1) >= 0

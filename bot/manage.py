@@ -25,8 +25,15 @@ def level(side: str, entry: float, sl0: float, r: float) -> float:
     return entry + d * r * abs(entry - sl0)
 
 
-def new_stop(side: str, entry: float, sl0: float, cur_sl: float, best: float, row, m: dict, k: dict) -> float:
-    """Most protective stop allowed after price has reached `best` (never loosens)."""
+def new_stop(side: str, entry: float, sl0: float, cur_sl: float, best: float, row, m: dict, k: dict,
+             window: list | None = None) -> float:
+    """Most protective stop allowed after price has reached `best` (never loosens).
+
+    Optional faster trails (knowledge/core.yaml `management`, all off by default):
+      trail_bars (+ fast_trail_start_r)   stop behind the lowest low (highest high) of the last N candles
+      chandelier_atr (+ chandelier_start_r)  stop N x ATR behind the best price
+    `window` = the most recent candles, newest last (needed for trail_bars).
+    """
     long = side == "buy"
     best_r = r_multiple(side, entry, sl0, best)
     cands = [cur_sl]
@@ -39,8 +46,12 @@ def new_stop(side: str, entry: float, sl0: float, cur_sl: float, best: float, ro
         lvl = brain.trail_level(row, side, k)
         if lvl is not None:
             cands.append(lvl)
-        if m.get("chandelier_atr"):
-            cands.append(best - m["chandelier_atr"] * row.atr if long else best + m["chandelier_atr"] * row.atr)
+    if m.get("chandelier_atr") and best_r >= m.get("chandelier_start_r", m.get("trail_start_r") or 0):
+        cands.append(best - m["chandelier_atr"] * row.atr if long else best + m["chandelier_atr"] * row.atr)
+    n = m.get("trail_bars")
+    if n and window and len(window) >= n and best_r >= m.get("fast_trail_start_r", m.get("trail_start_r") or 0):
+        w, buf = window[-n:], m["trail_buffer_atr"] * row.atr
+        cands.append(min(x.low for x in w) - buf if long else max(x.high for x in w) + buf)
     return max(cands) if long else min(cands)
 
 
