@@ -66,3 +66,36 @@ def test_get_requests_retry_but_orders_do_not(monkeypatch):
     with pytest.raises(requests.exceptions.ReadTimeout):
         c.request("POST", "/v2/orders")  # an order may already exist server-side: never retried
     assert calls["n"] == 1
+
+
+def _trader_with_trade(tmp_path, on_exchange_stop, side="buy", db_sl=0.24627):
+    from bot.db import DB
+    t = Trader.__new__(Trader)
+    t.db = DB(tmp_path / "t.db")
+    t.db.open_trade(symbol="ADAUSD", side=side, size=220, contract_value=1.0, entry_price=0.2459, stop_loss=0.2407,
+                    take_profit=0.2993, risk_usd=1.15, opened_at=1.0, tp1=0.2564, sl_current=db_sl)
+    orders = [{"id": 1, "stop_order_type": "stop_loss_order", "size": 220, "stop_price": str(on_exchange_stop)}]
+    t.edits = []
+    t.ex = SimpleNamespace(open_orders=lambda sym: orders,
+                           edit_stop=lambda sym, oid, px, long: t.edits.append(px))
+    t.price = lambda sym: 0.27
+    t.note = lambda *a: None
+    return t
+
+
+def test_manual_tighter_stop_is_adopted_and_never_loosened(tmp_path):
+    t = _trader_with_trade(tmp_path, on_exchange_stop=0.25048)
+    pos = SimpleNamespace(size=220)
+    t.adopt_manual_stop("ADAUSD", pos, t.ex.open_orders("ADAUSD"))
+    assert t.db.open_trades()[0]["sl_current"] == pytest.approx(0.25048)
+    trade = t.db.open_trades()[0]
+    t.move_stop(trade, pos, 0.2490, "trail")           # trailing wants a LOOSER stop than the manual one
+    assert t.edits == []
+    t.move_stop(trade, pos, 0.2583, "trail")           # a tighter stop is still applied
+    assert t.edits == [0.2583]
+
+
+def test_bot_stop_rounding_is_not_mistaken_for_a_manual_change(tmp_path):
+    t = _trader_with_trade(tmp_path, on_exchange_stop=0.24628, db_sl=0.246269)  # exchange rounds to the tick
+    t.adopt_manual_stop("ADAUSD", SimpleNamespace(size=220), t.ex.open_orders("ADAUSD"))
+    assert t.db.open_trades()[0]["sl_current"] == pytest.approx(0.246269)

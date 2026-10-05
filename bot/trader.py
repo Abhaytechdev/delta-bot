@@ -217,6 +217,10 @@ class Trader:
         sl_orders = [o for o in self.ex.open_orders(t["symbol"]) if o.get("stop_order_type") == "stop_loss_order"]
         if not sl_orders:
             return  # protect() will re-attach
+        prices = [float(o["stop_price"]) for o in sl_orders]
+        on_exchange = max(prices) if long else min(prices)
+        if (on_exchange >= new_sl) if long else (on_exchange <= new_sl):
+            return  # the stop on the exchange is already as tight or tighter (e.g. moved by hand): never loosen it
         for o in sl_orders:
             self.ex.edit_stop(t["symbol"], o["id"], new_sl, long)
         self.db.update_trade(t["id"], sl_current=new_sl)
@@ -252,6 +256,22 @@ class Trader:
             if better:
                 self.move_stop(t, pos, lvl, "trailing behind latest swing")
 
+    def adopt_manual_stop(self, sym: str, pos: Position, orders: list) -> None:
+        """If the stop on the exchange is tighter than the bot's record (changed by hand), adopt it so
+        the records, the trailing logic and the exit label all follow the stop that is really in force."""
+        t = self.open_trade(sym)
+        prices = [float(o["stop_price"]) for o in orders if o.get("stop_order_type") == "stop_loss_order"]
+        if not t or not prices:
+            return
+        long = pos.size > 0
+        on_exchange = max(prices) if long else min(prices)
+        cur = t["sl_current"] or t["stop_loss"]
+        tol = abs(cur) * 1e-4  # tick rounding
+        if (on_exchange > cur + tol) if long else (on_exchange < cur - tol):
+            self.db.update_trade(t["id"], sl_current=on_exchange)
+            self.note("INFO", f"{sym}: the stop on the exchange ({on_exchange:g}) is tighter than the bot's record "
+                              f"({cur:.5f}); it was changed by hand. Adopting it, trailing will never loosen it")
+
     def protect(self, positions: dict[str, Position]) -> None:
         """Every open position must have a stop-loss and target covering its full size; else add or close."""
         for sym, pos in positions.items():
@@ -259,6 +279,7 @@ class Trader:
             sl_size = sum(int(o["size"]) for o in orders if o.get("stop_order_type") == "stop_loss_order")
             tp_size = sum(int(o["size"]) for o in orders if o.get("stop_order_type") == "take_profit_order")
             if sl_size >= abs(pos.size) and tp_size >= abs(pos.size):
+                self.adopt_manual_stop(sym, pos, orders)
                 continue
             time.sleep(3)  # the exchange can lag right after a fill or an edit: look again before acting
             orders = self.ex.open_orders(sym)
