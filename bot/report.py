@@ -74,6 +74,20 @@ def main() -> None:
         body += "\n\n## Research: retail positioning forward test\n\n" + summary(cfg)
     except Exception as e:
         body += f"\n\n(retail forward test unavailable: {type(e).__name__})"
+    try:
+        from bot import journal
+        db = DB(cfg["storage"]["db_path"])
+        journal.ensure(db)
+        tz = ZoneInfo(cfg["report"]["timezone"])
+        d0 = datetime.strptime(day, "%Y-%m-%d").replace(tzinfo=tz).timestamp()
+        rows = db.conn.execute(
+            "SELECT t.*, r.mfe_r, r.mae_r, r.final_r, r.minutes_to_1r, r.minutes_to_2r, r.after_4h_r, r.after_24h_r, "
+            "r.after_72h_r, r.best_after_72h_r, r.note FROM trades t JOIN trade_review r ON r.trade_id=t.id "
+            "WHERE t.closed_at>=? AND t.closed_at<?", (d0, d0 + 86400)).fetchall()
+        if rows:
+            body += "\n\n## Trade journal (research, run `python -m bot.journal` first)\n\n" + "\n".join(journal.fmt(r, r) for r in rows)
+    except Exception as e:
+        body += f"\n\n(journal unavailable: {type(e).__name__})"
     analysis = llm.ask_text(load_secrets().anthropic_api_key, SYSTEM, body)
     body += "\n\n## Analysis (suggestions only)\n\n" + (analysis or "_Claude analysis skipped: set ANTHROPIC_API_KEY in .env to enable._")
     out = ROOT / cfg["report"]["dir"] / f"{day}.md"

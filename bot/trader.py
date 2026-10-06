@@ -16,7 +16,7 @@ import sys
 import time
 from datetime import datetime
 
-from bot import brain, crowd, manage
+from bot import brain, crowd, journal, manage
 from bot.config import ROOT, load_config, load_secrets
 from bot.db import DB
 from bot.exchange import RESOLUTION_SECONDS, Exchange, Position
@@ -57,6 +57,7 @@ class Trader:
         secrets = load_secrets()
         self.ex = Exchange(cfg, secrets)
         self.db = DB(cfg["storage"]["db_path"])
+        journal.ensure(self.db)
         self.risk = RiskManager(cfg, self.db)
         self.news = NewsMonitor(cfg)  # keyword scoring only: no Claude in live trading
         self.feed = PriceFeed(cfg["exchange"]["ws_url"], cfg["trading"]["pairs"], cfg["exchange"]["environment"])
@@ -67,6 +68,7 @@ class Trader:
         self.tf_s = RESOLUTION_SECONDS[self.tf]
         self._last_bar = int(self.db.get("last_bar", "0"))
         self._last_snapshot = 0.0
+        self._journal_last: dict = {}
         self._halt_logged = False
         self._stop = False
 
@@ -117,6 +119,7 @@ class Trader:
 
         positions = {p.symbol: p for p in self.ex.positions()}
         self.record_closed(positions)
+        self.journal_samples(positions)
         self.manage_tp1(positions)
         self.protect(positions)
         self.expire(positions)
@@ -133,6 +136,7 @@ class Trader:
         self._last_bar = bar
         self.db.set("last_bar", bar)
         self.record_crowd(frames)
+        self.journal_samples(positions, frames)
         self.trail(positions, frames)
         if self.risk.halted():
             if not self._halt_logged:
@@ -141,6 +145,25 @@ class Trader:
             return
         self._halt_logged = False
         self.look_for_setups(positions, frames, bal, equity)
+
+    def journal_samples(self, positions: dict[str, Position], frames: dict | None = None) -> None:
+        """Research journal (bot/journal.py): about one sample a minute per open trade, plus market context at each 4h close.
+        Never allowed to break trading."""
+        try:
+            for t in self.db.open_trades():
+                if t["symbol"] not in positions or not t["entry_price"]:
+                    continue
+                px = self.price(t["symbol"])
+                d = 1 if t["side"] == "buy" else -1
+                unreal = (px - t["entry_price"]) * d * abs(positions[t["symbol"]].size) * t["contract_value"]
+                ctx = None
+                if frames is not None and t["symbol"] in frames:
+                    row = frames[t["symbol"]].iloc[-1]
+                    ctx = {k: (None if row.get(k) != row.get(k) else float(row.get(k))) for k in ("close", "trend", "htf_trend", "atr", "rsi")
+                           if k in row.index}
+                journal.sample(self.db, t, px, unreal, self._journal_last, ctx)
+        except Exception as e:
+            log.warning("journal sample failed: %s", type(e).__name__)
 
     def record_crowd(self, frames: dict) -> None:
         """Research only (no effect on trading): log retail long/short positioning for later evaluation."""
