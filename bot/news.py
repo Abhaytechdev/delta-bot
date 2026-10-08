@@ -32,6 +32,7 @@ COIN_TERMS = {
     "SOLUSD": re.compile(r"\b(solana|sol)\b", re.I),
     "XRPUSD": re.compile(r"\b(xrp|ripple)\b", re.I),
     "DOGEUSD": re.compile(r"\b(dogecoin|doge)\b", re.I),
+    "BNBUSD": re.compile(r"\b(bnb|binance coin|bnb chain)\b", re.I),
 }
 MARKET_TERMS = re.compile(r"\b(crypto|cryptocurrency|market|sec|fed|etf|stablecoin|regulat\w*)\b", re.I)
 

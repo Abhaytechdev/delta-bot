@@ -23,7 +23,7 @@ LIVE_RETAIL = "https://fapi.binance.com/futures/data/globalLongShortAccountRatio
 METRICS = "https://data.binance.vision/data/futures/um/daily/metrics/{s}/{s}-metrics-{d}.zip"
 DIR = ROOT / "data" / "crowd"
 SYMBOL_MAP = {"BTCUSD": "BTCUSDT", "ETHUSD": "ETHUSDT", "ADAUSD": "ADAUSDT", "SOLUSD": "SOLUSDT",
-              "XRPUSD": "XRPUSDT", "DOGEUSD": "DOGEUSDT"}
+              "XRPUSD": "XRPUSDT", "DOGEUSD": "DOGEUSDT", "BNBUSD": "BNBUSDT"}
 
 
 def _fetch_day(sym: str, d: date) -> pd.DataFrame | None:
