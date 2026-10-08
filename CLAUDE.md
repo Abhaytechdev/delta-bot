@@ -17,11 +17,11 @@ Hybrid strategy: news-driven + technical analysis.
 6. After every commit, also run git push.
 
 ## Risk rules (editable in config.yaml, defaults below)
-- Pairs: BTCUSD, ETHUSD, ADAUSD perpetual
+- Pairs: BTCUSD, ETHUSD, ADAUSD, SOLUSD, XRPUSD, BNBUSD perpetual (6 majors, owner approved 2026-10-08)
 - Timeframe: 4h (swing trading; chosen by backtest)
 - Max leverage: 3x
 - Risk per trade: 1% of balance
-- Max open positions: 3
+- Max open positions: 4
 - Stop-loss at market structure (beyond the setup swing); at TP1 (2R) the SL moves to breakeven (no partial booking; 30% partial was tried and backtested worse); the rest trails behind swings (runner target 10R)
 - Setups come from knowledge/core.md + core.yaml (market structure, candles, psychology, sessions), scored by confluence; v2.3: min score 7.5, 1+ trigger
 - Daily loss limit: 3% → bot stops trading for the day

@@ -8,7 +8,7 @@ exchange:
   ws_url: wss://socket.india.delta.exchange
 
 trading:
-  pairs: [BTCUSD, ETHUSD, ADAUSD]
+  pairs: [BTCUSD, ETHUSD, ADAUSD, SOLUSD, XRPUSD, BNBUSD]
   timeframe: 4h
 
 news:
@@ -18,7 +18,7 @@ news:
 risk:
   max_leverage: 3
   risk_per_trade_pct: 1.0
-  max_open_positions: 3
+  max_open_positions: 4
   daily_loss_limit_pct: 3.0
   require_stop_loss: true
   require_take_profit: true
