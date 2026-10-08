@@ -8,7 +8,7 @@ exchange:
   ws_url: wss://socket-ind.testnet.deltaex.org
 
 trading:
-  pairs: [BTCUSD, ETHUSD, ADAUSD, SOLUSD, XRPUSD, BNBUSD]   # perpetual futures (ADA added after backtest, knowledge v2)
+  pairs: [BTCUSD, ETHUSD, ADAUSD, SOLUSD, XRPUSD]   # BNBUSD is not listed on testnet (live only)
   timeframe: 4h             # chosen by 3y backtest: only timeframe positive in- and out-of-sample
   # Entry/exit logic and trade management live in knowledge/core.yaml (+ core.md)
 
