@@ -152,6 +152,8 @@ def _score(r, k: dict, d: int, news: float, news_strong: float) -> tuple[float, 
 
     if r.volume_spike:
         add("volume_spike", "volume spike")
+        if k["entry"].get("volume_spike_trigger"):  # research knob, off by default: a volume spike counts as a trigger
+            triggers += 1
     if r.ctx_compression:
         add("compression", "after compression")
     if r.session_open:
