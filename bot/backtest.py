@@ -33,8 +33,11 @@ from bot.risk import ist_day, size_position
 
 BINANCE = "https://data-api.binance.vision/api/v3/klines?symbol={s}&interval={tf}&limit=1000&startTime={t}"
 SYMBOL_MAP = {"BTCUSD": "BTCUSDT", "ETHUSD": "ETHUSDT", "SOLUSD": "SOLUSDT", "XRPUSD": "XRPUSDT",
-              "ADAUSD": "ADAUSDT", "DOGEUSD": "DOGEUSDT"}
-CONTRACT_VALUE = {"BTCUSD": 0.001, "ETHUSD": 0.01, "SOLUSD": 1, "XRPUSD": 1, "ADAUSD": 1, "DOGEUSD": 100}
+              "ADAUSD": "ADAUSDT", "DOGEUSD": "DOGEUSDT",
+              "BNBUSD": "BNBUSDT", "LINKUSD": "LINKUSDT", "AVAXUSD": "AVAXUSDT", "LTCUSD": "LTCUSDT",
+              "DOTUSD": "DOTUSDT", "TRXUSD": "TRXUSDT", "BCHUSD": "BCHUSDT"}
+CONTRACT_VALUE = {"BTCUSD": 0.001, "ETHUSD": 0.01, "SOLUSD": 1, "XRPUSD": 1, "ADAUSD": 1, "DOGEUSD": 100,
+                  "BNBUSD": 0.1, "LINKUSD": 1, "AVAXUSD": 1, "LTCUSD": 0.1, "DOTUSD": 1, "TRXUSD": 1, "BCHUSD": 0.01}
 FEE = 0.0005 * 1.18          # taker + GST, per fill
 STOP_SLIPPAGE = 0.0002
 FUNDING_ON = True            # charge perpetual funding while a position is open
